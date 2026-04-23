@@ -386,6 +386,39 @@ async function deleteDocument(filePath) {
   if (error) throw error;
 }
 
+// ──────────────────────────────────────────────
+// CHAT MESSAGES
+// ──────────────────────────────────────────────
+async function getChatMessages(bookingId) {
+  const { data, error } = await getClient()
+    .from('chat_messages')
+    .select('*')
+    .eq('booking_id', bookingId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data || []).map(rowToMessage);
+}
+
+async function insertChatMessage(bookingId, senderId, content) {
+  const { data, error } = await getClient()
+    .from('chat_messages')
+    .insert({ booking_id: bookingId, sender_id: senderId, content })
+    .select()
+    .single();
+  if (error) throw error;
+  return rowToMessage(data);
+}
+
+function rowToMessage(row) {
+  return {
+    id:        row.id,
+    bookingId: row.booking_id,
+    senderId:  row.sender_id,
+    content:   row.content,
+    createdAt: row.created_at
+  };
+}
+
 module.exports = {
   getHistoryForUser,
   getAllHistory,
@@ -405,5 +438,7 @@ module.exports = {
   getAllReviews,
   insertReview,
   uploadDocument,
-  deleteDocument
+  deleteDocument,
+  getChatMessages,
+  insertChatMessage
 };

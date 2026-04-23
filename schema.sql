@@ -96,6 +96,18 @@ CREATE TABLE IF NOT EXISTS peer_reviews (
   created_at       TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Chat messages (tied to a booking/session)
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  booking_id  TEXT NOT NULL,
+  sender_id   TEXT NOT NULL,
+  content     TEXT NOT NULL,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_booking ON chat_messages(booking_id);
+CREATE INDEX IF NOT EXISTS idx_chat_sender  ON chat_messages(sender_id);
+
 -- ── Storage ──
 -- In the Supabase dashboard → Storage, create a public bucket named: documents
 -- (this cannot be done via SQL)

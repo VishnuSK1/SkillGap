@@ -3010,6 +3010,43 @@ app.get('/api/peer-coaching/analytics', async (req, res) => {
   }
 });
 
+// ── Peer Chat ──
+app.get('/api/chat/:bookingId', requireAuth, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const userId = normalizeEmailAddress(req.user.email);
+    const booking = await db.getBookingById(bookingId);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    if (booking.coachUserId !== userId && booking.learnerUserId !== userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    const messages = await db.getChatMessages(bookingId);
+    res.json({ messages });
+  } catch (err) {
+    console.error('GET /api/chat error:', err);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+app.post('/api/chat/:bookingId', requireAuth, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const userId = normalizeEmailAddress(req.user.email);
+    const { content } = req.body;
+    if (!content || !content.trim()) return res.status(400).json({ error: 'Message cannot be empty' });
+    const booking = await db.getBookingById(bookingId);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    if (booking.coachUserId !== userId && booking.learnerUserId !== userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    const message = await db.insertChatMessage(bookingId, userId, content.trim());
+    res.json({ message });
+  } catch (err) {
+    console.error('POST /api/chat error:', err);
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
 // ── Health Check (useful for Railway / Render) ──
 app.get('/api/health', (req, res) => {
   res.json({

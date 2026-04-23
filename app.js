@@ -128,6 +128,20 @@ function logout() {
 }
 
 // ── SPA Navigation ──
+function toggleMobileSidebar() {
+  var sidebar = document.querySelector('.sidebar');
+  var overlay = document.getElementById('sidebarOverlay');
+  if (sidebar) sidebar.classList.toggle('open');
+  if (overlay) overlay.classList.toggle('visible');
+}
+
+function closeMobileSidebar() {
+  var sidebar = document.querySelector('.sidebar');
+  var overlay = document.getElementById('sidebarOverlay');
+  if (sidebar) sidebar.classList.remove('open');
+  if (overlay) overlay.classList.remove('visible');
+}
+
 function navigateTo(page) {
   // Hide all pages
   document.querySelectorAll('.page-view').forEach(p => p.classList.remove('active'));
@@ -143,7 +157,7 @@ function navigateTo(page) {
   if (navItem) navItem.classList.add('active');
 
   // Update page title
-  const titles = { home: 'Dashboard', jobs: 'Jobs', skills: 'Skills Lab', profile: 'Profile', analyzer: 'Analyzer', assessment: 'Assessment', roadmap: 'Roadmap', coaching: 'Peer Coaching' };
+  const titles = { home: 'Dashboard', jobs: 'Jobs', profile: 'Profile', analyzer: 'Analyzer', assessment: 'Assessment', roadmap: 'Roadmap', coaching: 'Peer Coaching' };
   document.title = 'SkillGap Analyzer - ' + (titles[page] || 'Dashboard');
 
   // Initialize assessment page when navigating to it
@@ -1686,6 +1700,21 @@ function displayPastAssessmentScores() {
 }
 
 // ── Navigation Helpers ──
+function confirmQuitAssessment() {
+  var modal = document.getElementById('quitAssessModal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeQuitModal() {
+  var modal = document.getElementById('quitAssessModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function doQuitAssessment() {
+  closeQuitModal();
+  showAssessmentSelect();
+}
+
 function showAssessmentSelect() {
   assessSessionId = null;
   assessCurrentSkill = null;
@@ -2041,9 +2070,6 @@ function searchOnPlatform(platform) {
     case 'google':
       url = 'https://www.google.com/search?q=' + encodeURIComponent(fullQuery + ' jobs') + '&ibp=htl;jobs';
       break;
-    case 'linkedin':
-      url = 'https://www.linkedin.com/jobs/search/?keywords=' + encodeURIComponent(query) + (location ? '&location=' + encodeURIComponent(location) : '');
-      break;
     case 'indeed':
       url = 'https://www.indeed.com/jobs?q=' + encodeURIComponent(query) + (location ? '&l=' + encodeURIComponent(location) : '');
       break;
@@ -2092,7 +2118,6 @@ function openJobModal(job) {
   var searchTerm = encodeURIComponent(job.title);
   var platformsHtml =
     '<a href="https://www.google.com/search?q=' + searchTerm + '+jobs&ibp=htl;jobs" target="_blank" rel="noopener" class="job-modal-platform-btn"><span>🔍</span> Google Jobs</a>' +
-    '<a href="https://www.linkedin.com/jobs/search/?keywords=' + searchTerm + '" target="_blank" rel="noopener" class="job-modal-platform-btn"><span>💼</span> LinkedIn</a>' +
     '<a href="https://www.indeed.com/jobs?q=' + searchTerm + '" target="_blank" rel="noopener" class="job-modal-platform-btn"><span>🔵</span> Indeed</a>' +
     '<a href="https://www.glassdoor.com/Job/jobs.htm?sc.keyword=' + searchTerm + '" target="_blank" rel="noopener" class="job-modal-platform-btn"><span>🟢</span> Glassdoor</a>';
 
@@ -2257,7 +2282,6 @@ function renderProfileSocialLinks(social) {
   if (!socialEl) return;
 
   var links = [
-    { key: 'linkedin', label: 'LinkedIn' },
     { key: 'github', label: 'GitHub' },
     { key: 'portfolio', label: 'Portfolio' }
   ].filter(function(item) {
@@ -2307,9 +2331,9 @@ function buildProfileChecklist(profileData, strengthData, scoreMap) {
       action: "navigateTo('assessment')"
     },
     {
-      done: !!(social.linkedin || social.github || social.portfolio),
+      done: !!(social.github || social.portfolio),
       title: 'Attach at least one proof link',
-      copy: 'LinkedIn, GitHub, or a portfolio gives recruiters and reviewers a proof trail.',
+      copy: 'A GitHub profile or portfolio gives recruiters and reviewers a proof trail.',
       actionLabel: 'Add links',
       action: 'profileEditBasics()'
     }
@@ -2702,8 +2726,6 @@ async function profileEditBasics() {
     if (location === null) return;
     var bio = prompt('Short bio:', profileData.bio || '');
     if (bio === null) return;
-    var linkedin = prompt('LinkedIn URL (optional):', social.linkedin || '');
-    if (linkedin === null) return;
     var github = prompt('GitHub URL (optional):', social.github || '');
     if (github === null) return;
     var portfolio = prompt('Portfolio URL (optional):', social.portfolio || '');
@@ -2715,7 +2737,6 @@ async function profileEditBasics() {
       location: location.trim() || '',
       bio: bio.trim(),
       social: {
-        linkedin: linkedin.trim(),
         github: github.trim(),
         portfolio: portfolio.trim()
       }
@@ -2805,8 +2826,25 @@ document.addEventListener('DOMContentLoaded', function() {
     item.addEventListener('click', function(e) {
       e.preventDefault();
       navigateTo(this.getAttribute('data-page'));
+      closeMobileSidebar();
     });
   });
+
+  // Topbar global search
+  var topbarSearch = document.getElementById('topbarSearch');
+  if (topbarSearch) {
+    topbarSearch.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && this.value.trim()) {
+        var term = this.value.trim();
+        navigateTo('jobs');
+        setTimeout(function() {
+          var jobInput = document.getElementById('jobSearchInput');
+          if (jobInput) { jobInput.value = term; searchJobs(1); }
+        }, 100);
+        topbarSearch.value = '';
+      }
+    });
+  }
 
   // Navigate to home by default
   navigateTo('home');
@@ -3184,7 +3222,12 @@ function toggleRoadmapDetail(skill, idx, status) {
   // CTA
   var cta = '';
   if (status === 'current' || status === 'completed') {
-    cta = '<div class="rm-detail-cta"><button class="btn btn-primary" onclick="navigateTo(\'assessment\')">Take Assessment</button></div>';
+    var firstResource = node.resources && node.resources.length > 0 ? node.resources[0] : null;
+    if (firstResource) {
+      cta = '<div class="rm-detail-cta"><a href="' + firstResource.url + '" target="_blank" rel="noopener" class="btn btn-primary rm-learn-btn">Learn: ' + escapeHtml(firstResource.title) + ' ↗</a></div>';
+    }
+  } else if (status === 'locked') {
+    cta = '<div class="rm-detail-cta"><p class="rm-locked-hint">Complete the assessment to unlock this stage.</p></div>';
   }
 
   card.innerHTML = header + checklist + resources + cta;
@@ -3629,6 +3672,9 @@ function loadSessions() {
           actions = '<span style="font-size:12px;font-weight:600;color:#16a34a;">Reviewed</span>';
         }
 
+        var chatBtn = '<button class="btn btn-secondary btn-sm" onclick="openChatModal(\'' + b.id + '\', \'' + escHtml(otherPerson) + '\')">💬 Chat</button>';
+        var allActions = (actions ? actions + ' ' : '') + chatBtn;
+
         return '<div class="pc-session-card">' +
           '<div class="pc-session-icon ' + iconClass + '">' + iconEmoji + '</div>' +
           '<div class="pc-session-info">' +
@@ -3636,7 +3682,7 @@ function loadSessions() {
             '<div class="pc-session-meta">' + b.duration + ' min · ' + dateStr + (b.goal ? ' · ' + escHtml(b.goal) : '') + '</div>' +
           '</div>' +
           '<span class="pc-session-status ' + b.status + '">' + b.status + '</span>' +
-          (actions ? '<div class="pc-session-actions">' + actions + '</div>' : '') +
+          '<div class="pc-session-actions">' + allActions + '</div>' +
         '</div>';
       }).join('');
     })
@@ -3732,4 +3778,67 @@ function submitReview() {
       }
     })
     .catch(function() { alert('Network error. Please try again.'); });
+}
+
+// ── Peer Chat ──
+var chatCurrentBookingId = null;
+var chatPollInterval = null;
+
+function openChatModal(bookingId, otherPersonName) {
+  chatCurrentBookingId = bookingId;
+  document.getElementById('chatModalTitle').textContent = 'Chat with ' + otherPersonName;
+  document.getElementById('chatModalSub').textContent = 'Messages are saved to your session';
+  document.getElementById('pcChatModal').style.display = 'flex';
+  loadChatMessages();
+  chatPollInterval = setInterval(loadChatMessages, 5000);
+}
+
+function closeChatModal(e) {
+  if (e && e.target !== e.currentTarget) return;
+  document.getElementById('pcChatModal').style.display = 'none';
+  chatCurrentBookingId = null;
+  if (chatPollInterval) { clearInterval(chatPollInterval); chatPollInterval = null; }
+}
+
+function loadChatMessages() {
+  if (!chatCurrentBookingId) return;
+  var user = getActiveUser() || {};
+  fetch('/api/chat/' + chatCurrentBookingId)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var container = document.getElementById('chatMessages');
+      if (!container) return;
+      if (!data.messages || data.messages.length === 0) {
+        container.innerHTML = '<div class="chat-empty">No messages yet. Say hello!</div>';
+        return;
+      }
+      var myId = (user.email || '').toLowerCase().replace(/[@.]/g, '_');
+      var html = data.messages.map(function(m) {
+        var isMine = m.senderId === myId;
+        var time = new Date(m.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        return '<div class="chat-msg ' + (isMine ? 'mine' : 'theirs') + '">' +
+          '<div class="chat-bubble">' + escHtml(m.content) + '</div>' +
+          '<div class="chat-time">' + time + '</div>' +
+        '</div>';
+      }).join('');
+      container.innerHTML = html;
+      container.scrollTop = container.scrollHeight;
+    })
+    .catch(function(err) { console.error('Chat load error:', err); });
+}
+
+function sendChatMessage() {
+  if (!chatCurrentBookingId) return;
+  var input = document.getElementById('chatInput');
+  var content = input ? input.value.trim() : '';
+  if (!content) return;
+  input.value = '';
+  fetch('/api/chat/' + chatCurrentBookingId, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: content })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function() { loadChatMessages(); })
+    .catch(function() { if (input) input.value = content; });
 }
