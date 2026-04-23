@@ -3347,22 +3347,24 @@ function showPCSection(section) {
 function setupCoachForm(canCoach, hasProfile, userId) {
   var verifiedEl = document.getElementById('pcVerifiedSkills');
   var checksEl = document.getElementById('pcCoachSkillChecks');
+  var allSkills = ['Python', 'SQL', 'JavaScript', 'React', 'Machine Learning', 'Data Analysis', 'Statistics', 'Excel', 'Cloud Computing', 'Cybersecurity'];
 
+  // Show verified skills (or a subtle note if none yet)
   if (!canCoach || canCoach.length === 0) {
-    verifiedEl.innerHTML = '<p style="color:#94a3b8;font-size:13px;">No verified skills yet. Score 8+ on an assessment to unlock coaching.</p>';
-    checksEl.innerHTML = '<p style="color:#94a3b8;font-size:13px;">Complete assessments first to become eligible.</p>';
-    return;
+    verifiedEl.innerHTML = '<p style="color:#94a3b8;font-size:13px;">No verified skills yet — score 8+ on an assessment to get a verified badge next to your skill.</p>';
+  } else {
+    verifiedEl.innerHTML = canCoach.map(function(c) {
+      return '<span class="pc-verified-skill"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>' +
+        c.skill + ' <span class="score">' + c.score + '/10</span></span>';
+    }).join('');
   }
 
-  // Show verified skills
-  verifiedEl.innerHTML = canCoach.map(function(c) {
-    return '<span class="pc-verified-skill"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>' +
-      c.skill + ' <span class="score">' + c.score + '/10</span></span>';
-  }).join('');
-
-  // Show checkboxes for skills to coach
-  checksEl.innerHTML = canCoach.map(function(c) {
-    return '<label class="pc-check-label"><input type="checkbox" value="' + c.skill + '" checked> ' + c.skill + ' (' + c.score + '/10)</label>';
+  // Always show all skills as checkboxes; verified ones are pre-checked
+  var verifiedSkills = (canCoach || []).map(function(c) { return c.skill; });
+  checksEl.innerHTML = allSkills.map(function(skill) {
+    var isVerified = verifiedSkills.indexOf(skill) !== -1;
+    var badge = isVerified ? ' ✓' : '';
+    return '<label class="pc-check-label"><input type="checkbox" value="' + skill + '"' + (isVerified ? ' checked' : '') + '> ' + skill + badge + '</label>';
   }).join('');
 
   // If has profile, load it

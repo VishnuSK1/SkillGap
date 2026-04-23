@@ -912,7 +912,7 @@ body.dark-mode .quit-modal p { color: #94a3b8; }
 /* ── Peer Coaching Page                ── */
 /* ══════════════════════════════════════ */
 
-.pc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+.pc-header { margin-bottom: 20px; }
 .pc-header-actions { display: flex; gap: 8px; }
 .pc-badge { display: inline-flex; align-items: center; justify-content: center; background: #ef4444; color: #fff; font-size: 10px; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; margin-left: 6px; padding: 0 5px; }
 

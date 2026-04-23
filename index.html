@@ -895,10 +895,6 @@
       <h2 style="font-size:22px;font-weight:700;margin-bottom:4px;">Peer Coaching</h2>
       <p style="color:#64748b;font-size:13px;">Learn from verified high scorers or coach others in your strongest skills.</p>
     </div>
-    <div class="pc-header-actions">
-      <button class="btn btn-secondary" id="pcMySessionsBtn" onclick="showPCSection('sessions')">My Sessions <span class="pc-badge" id="pcSessionCount" style="display:none;">0</span></button>
-      <button class="btn btn-primary" id="pcBecomeCoachBtn" onclick="showPCSection('become-coach')">Become a Coach</button>
-    </div>
   </div>
 
   <!-- Eligibility Banner -->
@@ -927,7 +923,7 @@
   <!-- Tab Nav -->
   <div class="pc-tabs">
     <button class="pc-tab active" data-pc-tab="discover" onclick="switchPCTab('discover')">Discover Coaches</button>
-    <button class="pc-tab" data-pc-tab="sessions" onclick="switchPCTab('sessions')">My Sessions</button>
+    <button class="pc-tab" data-pc-tab="sessions" onclick="switchPCTab('sessions')">My Sessions <span class="pc-badge" id="pcSessionCount" style="display:none;">0</span></button>
     <button class="pc-tab" data-pc-tab="become-coach" onclick="switchPCTab('become-coach')">Become a Coach</button>
   </div>
 
