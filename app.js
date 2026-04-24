@@ -152,6 +152,9 @@ function navigateTo(page) {
   const target = document.getElementById('page-' + page);
   if (target) target.classList.add('active');
 
+  // Persist so reload returns to this page
+  localStorage.setItem('sgaLastPage', page);
+
   // Activate nav item
   const navItem = document.querySelector('.nav-item[data-page="' + page + '"]');
   if (navItem) navItem.classList.add('active');
@@ -2846,8 +2849,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Navigate to home by default
-  navigateTo('home');
+  // Restore last visited page, default to home
+  var validPages = ['home','jobs','profile','assessment','roadmap','coaching','analyzer'];
+  var lastPage = localStorage.getItem('sgaLastPage');
+  navigateTo(validPages.indexOf(lastPage) !== -1 ? lastPage : 'home');
 
   // Load notifications and auto-refresh every 30s
   loadNotifications();
