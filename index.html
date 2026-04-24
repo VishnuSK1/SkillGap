@@ -25,6 +25,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
       Jobs
     </a>
+    <a href="#" class="nav-item" data-page="skills">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      Skills Lab
+    </a>
     <a href="#" class="nav-item" data-page="profile">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       Profile
@@ -54,34 +58,16 @@
   </div>
 </aside>
 
-<!-- Mobile Sidebar Overlay -->
-<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
-
 <!-- ══════════ Top Bar ══════════ -->
 <header class="topbar">
-  <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleMobileSidebar()" aria-label="Open menu">
-    <span></span><span></span><span></span>
-  </button>
   <div class="search-box">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-    <input type="text" id="topbarSearch" placeholder="Search opportunities, skills, resources...">
+    <input type="text" placeholder="Search opportunities, skills, resources...">
   </div>
   <div class="topbar-right">
-    <div class="topbar-icon notif-btn" id="notifBtn" onclick="toggleNotifPanel()" title="Notifications">
+    <div class="topbar-icon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      <div class="notif-dot" id="notifDot" style="display:none;"></div>
-      <span class="notif-count" id="notifCount" style="display:none;">0</span>
-    </div>
-
-    <!-- Notification Dropdown -->
-    <div class="notif-panel" id="notifPanel" style="display:none;">
-      <div class="notif-panel-header">
-        <span class="notif-panel-title">Notifications</span>
-        <button class="notif-mark-all" onclick="markAllNotifsRead()">Mark all read</button>
-      </div>
-      <div class="notif-list" id="notifList">
-        <div class="notif-empty">Loading...</div>
-      </div>
+      <div class="notif-dot"></div>
     </div>
     <div class="topbar-icon" onclick="toggleDarkMode()" id="darkModeToggle" title="Toggle dark mode">
       <svg id="darkModeIconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
@@ -142,7 +128,7 @@
     <div class="card">
       <div class="card-header">
         <h3>Your Skill Matrix</h3>
-        <span class="card-link" onclick="navigateTo('assessment')">View All</span>
+        <span class="card-link" onclick="navigateTo('skills')">View All</span>
       </div>
       <div id="skillMatrix"></div>
     </div>
@@ -160,7 +146,7 @@
     <div class="card">
       <div class="card-header">
         <h3>Trending Skills</h3>
-        <span class="card-link" onclick="navigateTo('assessment')">Explore →</span>
+        <span class="card-link" onclick="navigateTo('skills')">Explore →</span>
       </div>
       <div id="trendingList"></div>
     </div>
@@ -299,7 +285,7 @@
       <!-- Search Across Platforms – Inline -->
       <div class="platform-search-section">
         <h3 class="platform-search-title">Search Across All Platforms</h3>
-        <p style="font-size:13px;color:#94a3b8;margin-bottom:16px;">Find jobs on Indeed, Glassdoor, Wellfound & more — all from one place</p>
+        <p style="font-size:13px;color:#94a3b8;margin-bottom:16px;">Find jobs on LinkedIn, Indeed, Glassdoor & more — all from one place</p>
 
         <div class="platform-search-bar">
           <input type="text" id="platformSearchQuery" placeholder="Job title, skill, or keyword..." class="jobs-search-input" style="padding-left:14px;flex:1;">
@@ -312,7 +298,14 @@
               <span style="color:#4285F4;">G</span><span style="color:#EA4335;">o</span><span style="color:#FBBC05;">o</span><span style="color:#4285F4;">g</span><span style="color:#34A853;">l</span><span style="color:#EA4335;">e</span>
             </div>
             <div class="platform-card-name">Google Jobs</div>
-            <div class="platform-card-desc">Aggregates Indeed, Glassdoor & 100+ job sites</div>
+            <div class="platform-card-desc">Aggregates LinkedIn, Indeed, Glassdoor & 100+ sites</div>
+            <div class="platform-card-btn">Search →</div>
+          </div>
+
+          <div class="platform-card" onclick="searchOnPlatform('linkedin')">
+            <div class="platform-card-icon">💼</div>
+            <div class="platform-card-name">LinkedIn</div>
+            <div class="platform-card-desc">500M+ professionals, top employer network</div>
             <div class="platform-card-btn">Search →</div>
           </div>
 
@@ -716,7 +709,6 @@
       <div class="quiz-meta">
         <span class="quiz-skill-badge" id="quizSkillName"></span>
         <span class="quiz-difficulty-badge" id="quizDifficulty">Difficulty: 5</span>
-        <button class="quiz-quit-btn" onclick="confirmQuitAssessment()" title="Quit assessment">✕ Quit</button>
       </div>
       <div class="quiz-timer" id="quizTimer">
         <svg width="40" height="40" viewBox="0 0 40 40">
@@ -826,19 +818,6 @@
     </div>
   </div>
 
-  <!-- Quit Confirmation Modal -->
-  <div class="quit-modal-overlay" id="quitAssessModal" style="display:none;">
-    <div class="quit-modal">
-      <div class="quit-modal-icon">⚠️</div>
-      <h3>Quit Assessment?</h3>
-      <p>If you quit now, <strong>this attempt will not be graded</strong> and your score won't be saved. Your progress will be lost.</p>
-      <div class="quit-modal-actions">
-        <button class="btn btn-secondary" onclick="closeQuitModal()">Keep Going</button>
-        <button class="btn" style="background:#dc2626;color:#fff;" onclick="doQuitAssessment()">Yes, Quit</button>
-      </div>
-    </div>
-  </div>
-
   <div class="footer">&copy; 2026 SkillGap Analyzer</div>
 </div>
 
@@ -907,6 +886,10 @@
       <h2 style="font-size:22px;font-weight:700;margin-bottom:4px;">Peer Coaching</h2>
       <p style="color:#64748b;font-size:13px;">Learn from verified high scorers or coach others in your strongest skills.</p>
     </div>
+    <div class="pc-header-actions">
+      <button class="btn btn-secondary" id="pcMySessionsBtn" onclick="showPCSection('sessions')">My Sessions <span class="pc-badge" id="pcSessionCount" style="display:none;">0</span></button>
+      <button class="btn btn-primary" id="pcBecomeCoachBtn" onclick="showPCSection('become-coach')">Become a Coach</button>
+    </div>
   </div>
 
   <!-- Eligibility Banner -->
@@ -935,7 +918,7 @@
   <!-- Tab Nav -->
   <div class="pc-tabs">
     <button class="pc-tab active" data-pc-tab="discover" onclick="switchPCTab('discover')">Discover Coaches</button>
-    <button class="pc-tab" data-pc-tab="sessions" onclick="switchPCTab('sessions')">My Sessions <span class="pc-badge" id="pcSessionCount" style="display:none;">0</span></button>
+    <button class="pc-tab" data-pc-tab="sessions" onclick="switchPCTab('sessions')">My Sessions</button>
     <button class="pc-tab" data-pc-tab="become-coach" onclick="switchPCTab('become-coach')">Become a Coach</button>
   </div>
 
@@ -1108,28 +1091,6 @@
       <button class="btn btn-primary" onclick="submitReview()" style="width:100%;margin-top:8px;">Submit Review</button>
       <div style="text-align:center;margin-top:12px;">
         <a href="#" onclick="navigateTo('assessment');closePCReviewModal();return false;" style="font-size:13px;color:#4f46e5;font-weight:600;">Retake Assessment to Track Improvement →</a>
-      </div>
-    </div>
-  </div>
-
-  <!-- Chat Modal -->
-  <div class="pc-modal-overlay" id="pcChatModal" style="display:none;" onclick="closeChatModal(event)" role="dialog" aria-modal="true">
-    <div class="pc-modal chat-modal" onclick="event.stopPropagation()">
-      <button class="pc-modal-close" onclick="closeChatModal()" aria-label="Close chat">&times;</button>
-      <div class="chat-modal-header">
-        <span class="chat-modal-icon">💬</span>
-        <div>
-          <h3 id="chatModalTitle" style="font-size:16px;font-weight:700;">Chat</h3>
-          <p id="chatModalSub" style="font-size:12px;color:#64748b;"></p>
-        </div>
-      </div>
-      <div class="chat-messages" id="chatMessages">
-        <div class="chat-loading">Loading messages...</div>
-      </div>
-      <div class="chat-input-row">
-        <input type="text" id="chatInput" class="chat-input" placeholder="Type a message..." maxlength="500"
-          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage();}">
-        <button class="btn btn-primary chat-send-btn" onclick="sendChatMessage()">Send</button>
       </div>
     </div>
   </div>

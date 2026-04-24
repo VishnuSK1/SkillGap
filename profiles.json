@@ -1,0 +1,109 @@
+{
+  "vkulathunkal@clarku.edu": {
+    "userId": "vkulathunkal@clarku.edu",
+    "email": "vkulathunkal@clarku.edu",
+    "name": "Vishnu Kulathunkal",
+    "title": "Aspiring Data Professional",
+    "bio": "Graduate student at Clark University passionate about data science, machine learning, and leveraging technology to solve real-world problems.",
+    "location": "Worcester, MA",
+    "skills": [
+      "Python",
+      "SQL",
+      "Machine Learning",
+      "Data Analysis",
+      "Excel",
+      "Statistics",
+      "Critical Thinking",
+      "Public Speaking",
+      "LaTeX",
+      "Academic Writing"
+    ],
+    "experience": [
+      {
+        "title": "Data Analyst Intern",
+        "company": "Tech Solutions Inc.",
+        "dates": "Jun 2025 – Aug 2025",
+        "description": "Analyzed large datasets using Python and SQL to derive business insights. Built automated reporting dashboards.",
+        "tags": [
+          "Python",
+          "SQL",
+          "Tableau",
+          "Data Visualization"
+        ]
+      },
+      {
+        "title": "Research Assistant",
+        "company": "Clark University",
+        "dates": "Sep 2024 – Present",
+        "description": "Conducting research in machine learning applications for environmental data analysis.",
+        "tags": [
+          "Machine Learning",
+          "Research",
+          "Python",
+          "Data Analysis"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "school": "Clark University",
+        "degree": "Master of Science in Data Analytics",
+        "dates": "2024 – 2026",
+        "gpa": "3.8",
+        "courses": "Data Mining, Statistical Learning, NLP, Deep Learning, Big Data Systems"
+      }
+    ],
+    "documents": [],
+    "social": {
+      "linkedin": "linkedin.com/in/vishnukulathunkal",
+      "github": "github.com/vishnukulathunkal",
+      "portfolio": ""
+    },
+    "role": "admin",
+    "provider": "local",
+    "createdAt": "2026-04-10T00:21:29.016Z",
+    "updatedAt": "2026-04-11T15:05:46.094Z"
+  },
+  "sarah.chen@clarku.edu": {
+    "userId": "sarah.chen@clarku.edu",
+    "name": "Sarah Chen",
+    "title": "Data Science TA",
+    "bio": "Teaching assistant for intro data science at Clark University.",
+    "location": "Worcester, MA",
+    "skills": [
+      "Python",
+      "SQL",
+      "Data Analysis",
+      "Statistics"
+    ],
+    "experience": []
+  },
+  "alex.kumar@clarku.edu": {
+    "userId": "alex.kumar@clarku.edu",
+    "name": "Alex Kumar",
+    "title": "ML Research Assistant",
+    "bio": "Working on deep learning research. Love teaching Python and ML concepts.",
+    "location": "Worcester, MA",
+    "skills": [
+      "Python",
+      "Machine Learning",
+      "Statistics",
+      "TensorFlow"
+    ],
+    "experience": []
+  },
+  "maria.lopez@clarku.edu": {
+    "userId": "maria.lopez@clarku.edu",
+    "name": "Maria Lopez",
+    "title": "Business Analytics Student",
+    "bio": "Passionate about data-driven decision making. Expert in SQL and Excel reporting.",
+    "location": "Worcester, MA",
+    "skills": [
+      "SQL",
+      "Excel",
+      "Data Analysis",
+      "Tableau"
+    ],
+    "experience": []
+  }
+}

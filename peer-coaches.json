@@ -1,0 +1,135 @@
+{
+  "vkulathunkal@clarku.edu": {
+    "userId": "vkulathunkal@clarku.edu",
+    "name": "Vishnu Kulathunkal",
+    "avatar": "VK",
+    "skillsOffered": [
+      "Cloud Computing"
+    ],
+    "headline": "Cloud Computing expert | AWS & GCP certified",
+    "bio": "Graduate student at Clark University with hands-on experience in cloud architecture, deployment, and DevOps. Happy to help with fundamentals and advanced topics.",
+    "verifiedSkills": [
+      {
+        "skill": "Cloud Computing",
+        "score": 10,
+        "verifiedAt": "2026-03-31T16:50:31.106Z"
+      }
+    ],
+    "sessionLengths": [
+      15,
+      20
+    ],
+    "active": true,
+    "createdAt": "2026-04-09T23:31:36.500Z",
+    "updatedAt": "2026-04-09T23:31:36.500Z"
+  },
+  "sarah.chen@clarku.edu": {
+    "userId": "sarah.chen@clarku.edu",
+    "name": "Sarah Chen",
+    "avatar": "SC",
+    "skillsOffered": [
+      "Python",
+      "SQL",
+      "Data Analysis"
+    ],
+    "headline": "Data Science TA | Python & SQL specialist",
+    "bio": "Teaching assistant for intro data science. Love breaking down complex queries and Python patterns into simple steps.",
+    "verifiedSkills": [
+      {
+        "skill": "Python",
+        "score": 9,
+        "verifiedAt": "2026-04-01T10:00:00Z"
+      },
+      {
+        "skill": "SQL",
+        "score": 9,
+        "verifiedAt": "2026-04-02T10:00:00Z"
+      },
+      {
+        "skill": "Data Analysis",
+        "score": 8,
+        "verifiedAt": "2026-04-03T10:00:00Z"
+      }
+    ],
+    "sessionLengths": [
+      15,
+      20,
+      30
+    ],
+    "active": true,
+    "createdAt": "2026-04-09T23:32:48.208Z",
+    "updatedAt": "2026-04-09T23:32:48.208Z"
+  },
+  "alex.kumar@clarku.edu": {
+    "userId": "alex.kumar@clarku.edu",
+    "name": "Alex Kumar",
+    "avatar": "AK",
+    "skillsOffered": [
+      "Python",
+      "Machine Learning",
+      "Statistics"
+    ],
+    "headline": "ML Research Assistant | Deep Learning Focus",
+    "bio": "Working on deep learning research at Clark. Happy to help with Python fundamentals through advanced ML topics.",
+    "verifiedSkills": [
+      {
+        "skill": "Python",
+        "score": 10,
+        "verifiedAt": "2026-04-04T10:00:00Z"
+      },
+      {
+        "skill": "Machine Learning",
+        "score": 9,
+        "verifiedAt": "2026-04-05T10:00:00Z"
+      },
+      {
+        "skill": "Statistics",
+        "score": 8,
+        "verifiedAt": "2026-04-05T11:00:00Z"
+      }
+    ],
+    "sessionLengths": [
+      20,
+      30
+    ],
+    "active": true,
+    "createdAt": "2026-04-09T23:32:48.209Z",
+    "updatedAt": "2026-04-09T23:32:48.209Z"
+  },
+  "maria.lopez@clarku.edu": {
+    "userId": "maria.lopez@clarku.edu",
+    "name": "Maria Lopez",
+    "avatar": "ML",
+    "skillsOffered": [
+      "SQL",
+      "Excel",
+      "Data Analysis"
+    ],
+    "headline": "Business Analytics Expert | SQL & Excel Pro",
+    "bio": "Passionate about data-driven decisions. Can help with SQL queries, Excel formulas, pivot tables, and data analysis workflows.",
+    "verifiedSkills": [
+      {
+        "skill": "SQL",
+        "score": 10,
+        "verifiedAt": "2026-04-06T10:00:00Z"
+      },
+      {
+        "skill": "Excel",
+        "score": 9,
+        "verifiedAt": "2026-04-06T11:00:00Z"
+      },
+      {
+        "skill": "Data Analysis",
+        "score": 9,
+        "verifiedAt": "2026-04-07T10:00:00Z"
+      }
+    ],
+    "sessionLengths": [
+      15,
+      20
+    ],
+    "active": true,
+    "createdAt": "2026-04-09T23:32:48.211Z",
+    "updatedAt": "2026-04-09T23:32:48.211Z"
+  }
+}

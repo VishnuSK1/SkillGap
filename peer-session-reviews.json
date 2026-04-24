@@ -1,0 +1,29 @@
+[
+  {
+    "bookingId": "BK-MOCK-1",
+    "coachUserId": "sarah.chen@clarku.edu",
+    "learnerUserId": "mock1@clarku.edu",
+    "rating": 5,
+    "feedback": "Amazing session! Sarah explained list comprehensions so clearly.",
+    "wouldRecommend": true,
+    "createdAt": "2026-04-09T23:32:48.212Z"
+  },
+  {
+    "bookingId": "BK-MOCK-2",
+    "coachUserId": "sarah.chen@clarku.edu",
+    "learnerUserId": "mock2@clarku.edu",
+    "rating": 4,
+    "feedback": "Very helpful with SQL joins. Would book again.",
+    "wouldRecommend": true,
+    "createdAt": "2026-04-09T23:32:48.213Z"
+  },
+  {
+    "bookingId": "BK-MOCK-3",
+    "coachUserId": "alex.kumar@clarku.edu",
+    "learnerUserId": "mock3@clarku.edu",
+    "rating": 5,
+    "feedback": "Alex made neural networks click for me. Highly recommend!",
+    "wouldRecommend": true,
+    "createdAt": "2026-04-09T23:32:48.214Z"
+  }
+]

@@ -1,0 +1,13 @@
+[
+  {
+    "id": "BK-1775777604836-x2gy",
+    "skill": "SQL",
+    "coachUserId": "sarah.chen@clarku.edu",
+    "learnerUserId": "vkulathunkal@clarku.edu",
+    "status": "pending",
+    "scheduledAt": "2026-04-15T14:00",
+    "duration": 20,
+    "goal": "Need help understanding JOINs and subqueries for my data analysis project.",
+    "createdAt": "2026-04-09T23:33:24.836Z"
+  }
+]

@@ -12,23 +12,6 @@ function parseStoredJson(raw, fallback) {
   }
 }
 
-// ── Auth Token Interceptor ──
-// Automatically attaches the stored bearer token to all /api/ requests.
-(function() {
-  const _fetch = window.fetch.bind(window);
-  window.fetch = function(url, options) {
-    const urlStr = typeof url === 'string' ? url : (url && url.url) || '';
-    if (urlStr.startsWith('/api/')) {
-      const token = localStorage.getItem('sgaAuthToken') || sessionStorage.getItem('sgaAuthToken');
-      if (token) {
-        options = options ? Object.assign({}, options) : {};
-        options.headers = Object.assign({}, options.headers || {}, { 'Authorization': 'Bearer ' + token });
-      }
-    }
-    return _fetch(url, options);
-  };
-})();
-
 function getActiveUser() {
   return parseStoredJson(localStorage.getItem('sgaCurrentUser'), null) ||
     parseStoredJson(sessionStorage.getItem('sgaCurrentUser'), null);
@@ -122,26 +105,10 @@ function logout() {
   sessionStorage.removeItem('sgaCurrentUser');
   localStorage.removeItem('sgaUser');
   sessionStorage.removeItem('sgaUser');
-  localStorage.removeItem('sgaAuthToken');
-  sessionStorage.removeItem('sgaAuthToken');
   window.location.href = 'login.html';
 }
 
 // ── SPA Navigation ──
-function toggleMobileSidebar() {
-  var sidebar = document.querySelector('.sidebar');
-  var overlay = document.getElementById('sidebarOverlay');
-  if (sidebar) sidebar.classList.toggle('open');
-  if (overlay) overlay.classList.toggle('visible');
-}
-
-function closeMobileSidebar() {
-  var sidebar = document.querySelector('.sidebar');
-  var overlay = document.getElementById('sidebarOverlay');
-  if (sidebar) sidebar.classList.remove('open');
-  if (overlay) overlay.classList.remove('visible');
-}
-
 function navigateTo(page) {
   // Hide all pages
   document.querySelectorAll('.page-view').forEach(p => p.classList.remove('active'));
@@ -152,15 +119,12 @@ function navigateTo(page) {
   const target = document.getElementById('page-' + page);
   if (target) target.classList.add('active');
 
-  // Persist so reload returns to this page
-  localStorage.setItem('sgaLastPage', page);
-
   // Activate nav item
   const navItem = document.querySelector('.nav-item[data-page="' + page + '"]');
   if (navItem) navItem.classList.add('active');
 
   // Update page title
-  const titles = { home: 'Dashboard', jobs: 'Jobs', profile: 'Profile', analyzer: 'Analyzer', assessment: 'Assessment', roadmap: 'Roadmap', coaching: 'Peer Coaching' };
+  const titles = { home: 'Dashboard', jobs: 'Jobs', skills: 'Skills Lab', profile: 'Profile', analyzer: 'Analyzer', assessment: 'Assessment', roadmap: 'Roadmap', coaching: 'Peer Coaching' };
   document.title = 'SkillGap Analyzer - ' + (titles[page] || 'Dashboard');
 
   // Initialize assessment page when navigating to it
@@ -231,31 +195,15 @@ function initSkillMatrix() {
 
 // ── Home Page: User Skills ──
 function initUserSkills() {
+  const skills = ['Data Analysis', 'Academic Writing', 'Python', 'LaTeX', 'Public Speaking', 'Critical Thinking', 'SQL', 'Machine Learning'];
   const el = document.getElementById('userSkillChips');
   if (!el) return;
+  el.innerHTML = '';
+  skills.forEach(s => { el.innerHTML += '<span class="skill-chip">' + s + '</span>'; });
+  el.innerHTML += '<span class="add-skill-btn" onclick="editSkillsPrompt()">+ Add Skill</span>';
 
-  var user = getActiveUser() || {};
-  var email = user.email || '';
-
-  fetch('/api/profile?userId=' + encodeURIComponent(email))
-    .then(function(r) { return r.json(); })
-    .then(function(profile) {
-      var skills = profile.skills || [];
-      el.innerHTML = '';
-      if (skills.length === 0) {
-        el.innerHTML = '<span style="color:#94a3b8;font-size:13px;">No skills added yet.</span>';
-      } else {
-        skills.forEach(function(s) {
-          el.innerHTML += '<span class="skill-chip">' + s + '</span>';
-        });
-      }
-      el.innerHTML += '<span class="add-skill-btn" onclick="navigateTo(\'profile\')">+ Add Skill</span>';
-      displayPastAssessmentScores();
-    })
-    .catch(function() {
-      el.innerHTML = '<span class="add-skill-btn" onclick="navigateTo(\'profile\')">+ Add Skill</span>';
-      displayPastAssessmentScores();
-    });
+  // Show past assessment scores if available
+  displayPastAssessmentScores();
 }
 
 function editSkillsPrompt() { alert('Skill editing coming soon!'); }
@@ -1703,21 +1651,6 @@ function displayPastAssessmentScores() {
 }
 
 // ── Navigation Helpers ──
-function confirmQuitAssessment() {
-  var modal = document.getElementById('quitAssessModal');
-  if (modal) modal.style.display = 'flex';
-}
-
-function closeQuitModal() {
-  var modal = document.getElementById('quitAssessModal');
-  if (modal) modal.style.display = 'none';
-}
-
-function doQuitAssessment() {
-  closeQuitModal();
-  showAssessmentSelect();
-}
-
 function showAssessmentSelect() {
   assessSessionId = null;
   assessCurrentSkill = null;
@@ -2073,6 +2006,9 @@ function searchOnPlatform(platform) {
     case 'google':
       url = 'https://www.google.com/search?q=' + encodeURIComponent(fullQuery + ' jobs') + '&ibp=htl;jobs';
       break;
+    case 'linkedin':
+      url = 'https://www.linkedin.com/jobs/search/?keywords=' + encodeURIComponent(query) + (location ? '&location=' + encodeURIComponent(location) : '');
+      break;
     case 'indeed':
       url = 'https://www.indeed.com/jobs?q=' + encodeURIComponent(query) + (location ? '&l=' + encodeURIComponent(location) : '');
       break;
@@ -2121,6 +2057,7 @@ function openJobModal(job) {
   var searchTerm = encodeURIComponent(job.title);
   var platformsHtml =
     '<a href="https://www.google.com/search?q=' + searchTerm + '+jobs&ibp=htl;jobs" target="_blank" rel="noopener" class="job-modal-platform-btn"><span>🔍</span> Google Jobs</a>' +
+    '<a href="https://www.linkedin.com/jobs/search/?keywords=' + searchTerm + '" target="_blank" rel="noopener" class="job-modal-platform-btn"><span>💼</span> LinkedIn</a>' +
     '<a href="https://www.indeed.com/jobs?q=' + searchTerm + '" target="_blank" rel="noopener" class="job-modal-platform-btn"><span>🔵</span> Indeed</a>' +
     '<a href="https://www.glassdoor.com/Job/jobs.htm?sc.keyword=' + searchTerm + '" target="_blank" rel="noopener" class="job-modal-platform-btn"><span>🟢</span> Glassdoor</a>';
 
@@ -2285,6 +2222,7 @@ function renderProfileSocialLinks(social) {
   if (!socialEl) return;
 
   var links = [
+    { key: 'linkedin', label: 'LinkedIn' },
     { key: 'github', label: 'GitHub' },
     { key: 'portfolio', label: 'Portfolio' }
   ].filter(function(item) {
@@ -2334,9 +2272,9 @@ function buildProfileChecklist(profileData, strengthData, scoreMap) {
       action: "navigateTo('assessment')"
     },
     {
-      done: !!(social.github || social.portfolio),
+      done: !!(social.linkedin || social.github || social.portfolio),
       title: 'Attach at least one proof link',
-      copy: 'A GitHub profile or portfolio gives recruiters and reviewers a proof trail.',
+      copy: 'LinkedIn, GitHub, or a portfolio gives recruiters and reviewers a proof trail.',
       actionLabel: 'Add links',
       action: 'profileEditBasics()'
     }
@@ -2729,6 +2667,8 @@ async function profileEditBasics() {
     if (location === null) return;
     var bio = prompt('Short bio:', profileData.bio || '');
     if (bio === null) return;
+    var linkedin = prompt('LinkedIn URL (optional):', social.linkedin || '');
+    if (linkedin === null) return;
     var github = prompt('GitHub URL (optional):', social.github || '');
     if (github === null) return;
     var portfolio = prompt('Portfolio URL (optional):', social.portfolio || '');
@@ -2740,6 +2680,7 @@ async function profileEditBasics() {
       location: location.trim() || '',
       bio: bio.trim(),
       social: {
+        linkedin: linkedin.trim(),
         github: github.trim(),
         portfolio: portfolio.trim()
       }
@@ -2829,211 +2770,12 @@ document.addEventListener('DOMContentLoaded', function() {
     item.addEventListener('click', function(e) {
       e.preventDefault();
       navigateTo(this.getAttribute('data-page'));
-      closeMobileSidebar();
     });
   });
 
-  // Topbar global search
-  var topbarSearch = document.getElementById('topbarSearch');
-  if (topbarSearch) {
-    topbarSearch.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter' && this.value.trim()) {
-        var term = this.value.trim();
-        navigateTo('jobs');
-        setTimeout(function() {
-          var jobInput = document.getElementById('jobSearchInput');
-          if (jobInput) { jobInput.value = term; searchJobs(1); }
-        }, 100);
-        topbarSearch.value = '';
-      }
-    });
-  }
-
-  // Restore last visited page, default to home
-  var validPages = ['home','jobs','profile','assessment','roadmap','coaching','analyzer'];
-  var lastPage = localStorage.getItem('sgaLastPage');
-  navigateTo(validPages.indexOf(lastPage) !== -1 ? lastPage : 'home');
-
-  // Load notifications and auto-refresh every 30s
-  loadNotifications();
-  setInterval(loadNotifications, 30000);
-
-  // Close notif panel when clicking outside
-  document.addEventListener('click', function(e) {
-    var panel = document.getElementById('notifPanel');
-    var btn = document.getElementById('notifBtn');
-    if (panel && panel.style.display !== 'none' && !panel.contains(e.target) && btn && !btn.contains(e.target)) {
-      panel.style.display = 'none';
-    }
-  });
+  // Navigate to home by default
+  navigateTo('home');
 });
-
-// ══════════════════════════════════════
-// ── Notifications
-// ══════════════════════════════════════
-
-var _notifPanelOpen = false;
-
-function toggleNotifPanel() {
-  var panel = document.getElementById('notifPanel');
-  if (!panel) return;
-  _notifPanelOpen = panel.style.display === 'none' || panel.style.display === '';
-  panel.style.display = _notifPanelOpen ? 'block' : 'none';
-  if (_notifPanelOpen) loadNotifications();
-}
-
-function loadNotifications() {
-  var user = getActiveUser() || {};
-  if (!user.email) return;
-
-  fetch('/api/peer-coaching/bookings?userId=' + encodeURIComponent(user.email))
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      var bookings = (data && data.bookings) ? data.bookings : [];
-      var seen = getSeenNotifs();
-      var items = [];
-
-      bookings.forEach(function(b) {
-        var notifId, iconClass, emoji, title, sub, action, ts;
-        ts = b.updatedAt || b.createdAt || '';
-        var timeStr = ts ? timeAgo(ts) : '';
-
-        if (b.role === 'coach' && b.status === 'pending') {
-          // Someone booked you as a coach
-          notifId = 'booking-pending-' + b.id;
-          iconClass = 'booking';
-          emoji = '📅';
-          title = 'New session request';
-          sub = (b.learnerName || 'A student') + ' wants a ' + b.duration + 'min ' + escHtml(b.skill) + ' session';
-          action = function() { navigateTo('coaching'); switchPCTab('sessions'); };
-        } else if (b.role === 'learner' && b.status === 'confirmed') {
-          // Your booking was accepted
-          notifId = 'booking-confirmed-' + b.id;
-          iconClass = 'accepted';
-          emoji = '✅';
-          title = 'Session confirmed!';
-          sub = (b.coachName || 'Your coach') + ' accepted your ' + escHtml(b.skill) + ' session request';
-          action = function() { navigateTo('coaching'); switchPCTab('sessions'); };
-        } else if (b.role === 'learner' && b.status === 'cancelled') {
-          notifId = 'booking-cancelled-' + b.id;
-          iconClass = 'declined';
-          emoji = '❌';
-          title = 'Session declined';
-          sub = (b.coachName || 'Your coach') + ' declined your ' + escHtml(b.skill) + ' request';
-          action = function() { navigateTo('coaching'); switchPCTab('sessions'); };
-        } else if (b.status === 'completed' && b.role === 'learner' && !b.hasReview) {
-          notifId = 'booking-review-' + b.id;
-          iconClass = 'completed';
-          emoji = '⭐';
-          title = 'Rate your session';
-          sub = 'How was your ' + escHtml(b.skill) + ' session with ' + (b.coachName || 'your coach') + '?';
-          action = function() { navigateTo('coaching'); switchPCTab('sessions'); };
-        } else {
-          return;
-        }
-
-        if (notifId) {
-          items.push({
-            id: notifId,
-            iconClass: iconClass,
-            emoji: emoji,
-            title: title,
-            sub: sub,
-            time: timeStr,
-            unread: !seen[notifId],
-            action: action
-          });
-        }
-      });
-
-      renderNotifications(items);
-    })
-    .catch(function() {
-      var list = document.getElementById('notifList');
-      if (list) list.innerHTML = '<div class="notif-empty">Could not load notifications.</div>';
-    });
-}
-
-function renderNotifications(items) {
-  var list = document.getElementById('notifList');
-  var dot = document.getElementById('notifDot');
-  var countEl = document.getElementById('notifCount');
-  if (!list) return;
-
-  var unreadCount = items.filter(function(n) { return n.unread; }).length;
-
-  if (items.length === 0) {
-    list.innerHTML = '<div class="notif-empty">You\'re all caught up! 🎉</div>';
-  } else {
-    list.innerHTML = items.map(function(n, idx) {
-      return '<div class="notif-item' + (n.unread ? ' unread' : '') + '" onclick="handleNotifClick(' + idx + ')" data-notif-id="' + n.id + '">' +
-        '<div class="notif-icon ' + n.iconClass + '">' + n.emoji + '</div>' +
-        '<div class="notif-body">' +
-          '<div class="notif-body-title">' + n.title + '</div>' +
-          '<div class="notif-body-sub">' + n.sub + '</div>' +
-          (n.time ? '<div class="notif-body-time">' + n.time + '</div>' : '') +
-        '</div>' +
-        (n.unread ? '<div class="notif-unread-dot"></div>' : '') +
-      '</div>';
-    }).join('');
-
-    // Store actions for click handling
-    window._notifActions = items.map(function(n) { return { id: n.id, action: n.action }; });
-  }
-
-  // Update badge
-  if (unreadCount > 0) {
-    if (dot) dot.style.display = 'none';
-    if (countEl) { countEl.textContent = unreadCount > 9 ? '9+' : unreadCount; countEl.style.display = 'flex'; }
-  } else {
-    if (dot) dot.style.display = 'none';
-    if (countEl) countEl.style.display = 'none';
-  }
-}
-
-function handleNotifClick(idx) {
-  var actions = window._notifActions || [];
-  var notif = actions[idx];
-  if (!notif) return;
-  markNotifSeen(notif.id);
-  // Re-render to remove unread state
-  var el = document.querySelector('[data-notif-id="' + notif.id + '"]');
-  if (el) { el.classList.remove('unread'); var dot = el.querySelector('.notif-unread-dot'); if (dot) dot.remove(); }
-  document.getElementById('notifPanel').style.display = 'none';
-  if (notif.action) notif.action();
-}
-
-function markAllNotifsRead() {
-  var all = document.querySelectorAll('.notif-item[data-notif-id]');
-  all.forEach(function(el) {
-    markNotifSeen(el.getAttribute('data-notif-id'));
-    el.classList.remove('unread');
-    var dot = el.querySelector('.notif-unread-dot');
-    if (dot) dot.remove();
-  });
-  var countEl = document.getElementById('notifCount');
-  var dotEl = document.getElementById('notifDot');
-  if (countEl) countEl.style.display = 'none';
-  if (dotEl) dotEl.style.display = 'none';
-}
-
-function getSeenNotifs() {
-  try { return JSON.parse(localStorage.getItem('sgaSeenNotifs') || '{}'); } catch(e) { return {}; }
-}
-
-function markNotifSeen(id) {
-  var seen = getSeenNotifs();
-  seen[id] = Date.now();
-  localStorage.setItem('sgaSeenNotifs', JSON.stringify(seen));
-}
-
-function timeAgo(isoStr) {
-  var diff = (Date.now() - new Date(isoStr).getTime()) / 1000;
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-  return Math.floor(diff / 86400) + 'd ago';
-}
 
 // ══════════════════════════════════════
 // ── Roadmap Module
@@ -3407,12 +3149,7 @@ function toggleRoadmapDetail(skill, idx, status) {
   // CTA
   var cta = '';
   if (status === 'current' || status === 'completed') {
-    var firstResource = node.resources && node.resources.length > 0 ? node.resources[0] : null;
-    if (firstResource) {
-      cta = '<div class="rm-detail-cta"><a href="' + firstResource.url + '" target="_blank" rel="noopener" class="btn btn-primary rm-learn-btn">Learn: ' + escapeHtml(firstResource.title) + ' ↗</a></div>';
-    }
-  } else if (status === 'locked') {
-    cta = '<div class="rm-detail-cta"><p class="rm-locked-hint">Complete the assessment to unlock this stage.</p></div>';
+    cta = '<div class="rm-detail-cta"><button class="btn btn-primary" onclick="navigateTo(\'assessment\')">Take Assessment</button></div>';
   }
 
   card.innerHTML = header + checklist + resources + cta;
@@ -3532,24 +3269,22 @@ function showPCSection(section) {
 function setupCoachForm(canCoach, hasProfile, userId) {
   var verifiedEl = document.getElementById('pcVerifiedSkills');
   var checksEl = document.getElementById('pcCoachSkillChecks');
-  var allSkills = ['Python', 'SQL', 'JavaScript', 'React', 'Machine Learning', 'Data Analysis', 'Statistics', 'Excel', 'Cloud Computing', 'Cybersecurity'];
 
-  // Show verified skills (or a subtle note if none yet)
   if (!canCoach || canCoach.length === 0) {
-    verifiedEl.innerHTML = '<p style="color:#94a3b8;font-size:13px;">No verified skills yet — score 8+ on an assessment to get a verified badge next to your skill.</p>';
-  } else {
-    verifiedEl.innerHTML = canCoach.map(function(c) {
-      return '<span class="pc-verified-skill"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>' +
-        c.skill + ' <span class="score">' + c.score + '/10</span></span>';
-    }).join('');
+    verifiedEl.innerHTML = '<p style="color:#94a3b8;font-size:13px;">No verified skills yet. Score 8+ on an assessment to unlock coaching.</p>';
+    checksEl.innerHTML = '<p style="color:#94a3b8;font-size:13px;">Complete assessments first to become eligible.</p>';
+    return;
   }
 
-  // Always show all skills as checkboxes; verified ones are pre-checked
-  var verifiedSkills = (canCoach || []).map(function(c) { return c.skill; });
-  checksEl.innerHTML = allSkills.map(function(skill) {
-    var isVerified = verifiedSkills.indexOf(skill) !== -1;
-    var badge = isVerified ? ' ✓' : '';
-    return '<label class="pc-check-label"><input type="checkbox" value="' + skill + '"' + (isVerified ? ' checked' : '') + '> ' + skill + badge + '</label>';
+  // Show verified skills
+  verifiedEl.innerHTML = canCoach.map(function(c) {
+    return '<span class="pc-verified-skill"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>' +
+      c.skill + ' <span class="score">' + c.score + '/10</span></span>';
+  }).join('');
+
+  // Show checkboxes for skills to coach
+  checksEl.innerHTML = canCoach.map(function(c) {
+    return '<label class="pc-check-label"><input type="checkbox" value="' + c.skill + '" checked> ' + c.skill + ' (' + c.score + '/10)</label>';
   }).join('');
 
   // If has profile, load it
@@ -3859,9 +3594,6 @@ function loadSessions() {
           actions = '<span style="font-size:12px;font-weight:600;color:#16a34a;">Reviewed</span>';
         }
 
-        var chatBtn = '<button class="btn btn-secondary btn-sm" onclick="openChatModal(\'' + b.id + '\', \'' + escHtml(otherPerson) + '\')">💬 Chat</button>';
-        var allActions = (actions ? actions + ' ' : '') + chatBtn;
-
         return '<div class="pc-session-card">' +
           '<div class="pc-session-icon ' + iconClass + '">' + iconEmoji + '</div>' +
           '<div class="pc-session-info">' +
@@ -3869,7 +3601,7 @@ function loadSessions() {
             '<div class="pc-session-meta">' + b.duration + ' min · ' + dateStr + (b.goal ? ' · ' + escHtml(b.goal) : '') + '</div>' +
           '</div>' +
           '<span class="pc-session-status ' + b.status + '">' + b.status + '</span>' +
-          '<div class="pc-session-actions">' + allActions + '</div>' +
+          (actions ? '<div class="pc-session-actions">' + actions + '</div>' : '') +
         '</div>';
       }).join('');
     })
@@ -3965,71 +3697,4 @@ function submitReview() {
       }
     })
     .catch(function() { alert('Network error. Please try again.'); });
-}
-
-// ── Peer Chat ──
-var chatCurrentBookingId = null;
-var chatPollInterval = null;
-
-function openChatModal(bookingId, otherPersonName) {
-  chatCurrentBookingId = bookingId;
-  document.getElementById('chatModalTitle').textContent = 'Chat with ' + otherPersonName;
-  document.getElementById('chatModalSub').textContent = 'Messages are saved to your session';
-  document.getElementById('pcChatModal').style.display = 'flex';
-  loadChatMessages();
-  chatPollInterval = setInterval(loadChatMessages, 5000);
-}
-
-function closeChatModal(e) {
-  if (e && e.target !== e.currentTarget) return;
-  document.getElementById('pcChatModal').style.display = 'none';
-  chatCurrentBookingId = null;
-  if (chatPollInterval) { clearInterval(chatPollInterval); chatPollInterval = null; }
-}
-
-function loadChatMessages() {
-  if (!chatCurrentBookingId) return;
-  var user = getActiveUser() || {};
-  fetch('/api/chat/' + chatCurrentBookingId)
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      var container = document.getElementById('chatMessages');
-      if (!container) return;
-      if (data.error) {
-        container.innerHTML = '<div class="chat-empty" style="color:#dc2626;">' + data.error + '</div>';
-        return;
-      }
-      if (!data.messages || data.messages.length === 0) {
-        container.innerHTML = '<div class="chat-empty">No messages yet. Say hello!</div>';
-        return;
-      }
-      var myId = (user.email || '').toLowerCase().trim();
-      var html = data.messages.map(function(m) {
-        var isMine = m.senderId === myId;
-        var time = new Date(m.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-        return '<div class="chat-msg ' + (isMine ? 'mine' : 'theirs') + '">' +
-          '<div class="chat-bubble">' + escHtml(m.content) + '</div>' +
-          '<div class="chat-time">' + time + '</div>' +
-        '</div>';
-      }).join('');
-      container.innerHTML = html;
-      container.scrollTop = container.scrollHeight;
-    })
-    .catch(function(err) { console.error('Chat load error:', err); });
-}
-
-function sendChatMessage() {
-  if (!chatCurrentBookingId) return;
-  var input = document.getElementById('chatInput');
-  var content = input ? input.value.trim() : '';
-  if (!content) return;
-  input.value = '';
-  fetch('/api/chat/' + chatCurrentBookingId, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content: content })
-  })
-    .then(function(r) { return r.json(); })
-    .then(function() { loadChatMessages(); })
-    .catch(function() { if (input) input.value = content; });
 }

@@ -10,9 +10,6 @@ const fs = require('fs');
 const crypto = require('crypto');
 const multer = require('multer');
 const mammoth = require('mammoth');
-const rateLimit = require('express-rate-limit');
-const pdfParse = require('pdf-parse');
-const db = require('./db');
 
 const app = express();
 app.use(express.json());
@@ -78,91 +75,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ── Rate Limiting ──
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many attempts. Please wait 15 minutes before trying again.' }
-});
-
-// ── Auth Token Store ──
-// Maps token -> { userId, createdAt }
-const authTokens = {};
-const AUTH_TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-
-// Clean up expired auth tokens every hour
-setInterval(() => {
-  const now = Date.now();
-  for (const token of Object.keys(authTokens)) {
-    if (now - authTokens[token].createdAt > AUTH_TOKEN_MAX_AGE_MS) {
-      delete authTokens[token];
-    }
-  }
-}, 60 * 60 * 1000);
-
-function generateAuthToken(userId) {
-  const token = crypto.randomBytes(32).toString('hex');
-  authTokens[token] = { userId, createdAt: Date.now() };
-  return token;
-}
-
-function verifyAuthToken(token) {
-  const record = authTokens[token];
-  if (!record) return null;
-  if (Date.now() - record.createdAt > AUTH_TOKEN_MAX_AGE_MS) {
-    delete authTokens[token];
-    return null;
-  }
-  return record.userId;
-}
-
-// ── Auth Middleware (applied to protected API routes) ──
-function requireAuth(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  if (!token) {
-    return res.status(401).json({ error: 'Authentication required.' });
-  }
-  const userId = verifyAuthToken(token);
-  if (!userId) {
-    return res.status(401).json({ error: 'Invalid or expired session. Please sign in again.' });
-  }
-  req.authenticatedUserId = userId;
-  next();
-}
-
 app.use(express.static(STATIC_DIR));
-
-// ── Global API Auth Guard ──
-// All /api/ routes require a valid bearer token EXCEPT the whitelist below.
-// Paths are relative to /api (the mount point), so /api/auth/login → /auth/login
-const AUTH_PUBLIC_ROUTES = new Set([
-  '/auth/login',
-  '/auth/signup',
-  '/auth/social',
-  '/health',
-  '/jobs',
-  '/jobs/categories',
-  '/news',
-  '/skills',
-  '/dashboard/leaderboard'
-]);
-
-app.use('/api', (req, res, next) => {
-  const routePath = req.path;
-  if (AUTH_PUBLIC_ROUTES.has(routePath)) return next();
-  // Allow serving uploaded documents without auth (linked from profile)
-  if (routePath.startsWith('/profile/documents/')) return next();
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'Authentication required.' });
-  const userId = verifyAuthToken(token);
-  if (!userId) return res.status(401).json({ error: 'Invalid or expired session. Please sign in again.' });
-  req.authenticatedUserId = userId;
-  next();
-});
 
 // ── Load Question Bank ──
 let questionBank = {};
@@ -193,30 +106,23 @@ const supplementaryFiles = [
   'questions-react.json',
   'questions-statistics.json',
   'questions-cybersecurity.json',
-  'questions-data-analysis.json',
-  'questions-cloud.json',
-  'questions-excel.json',
-  'questions-javascript.json'
+  'questions-data-analysis.json'
 ];
-
-function mergeQuestionsFromArray(questions, sourceName) {
-  questions.forEach(q => {
-    const skill = q.skill;
-    if (!skill) return;
-    if (!questionBank[skill]) questionBank[skill] = [];
-    const existingIds = new Set(questionBank[skill].map(x => x.id));
-    if (!existingIds.has(q.id)) {
-      questionBank[skill].push(q);
-    }
-  });
-}
 
 supplementaryFiles.forEach(file => {
   const filePath = path.join(APP_DIR, file);
   if (fs.existsSync(filePath)) {
     try {
       const questions = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      mergeQuestionsFromArray(questions, file);
+      // Group by skill and merge, avoiding duplicate IDs
+      questions.forEach(q => {
+        const skill = q.skill;
+        if (!questionBank[skill]) questionBank[skill] = [];
+        const existingIds = new Set(questionBank[skill].map(x => x.id));
+        if (!existingIds.has(q.id)) {
+          questionBank[skill].push(q);
+        }
+      });
       console.log(`   Loaded ${file}`);
     } catch (e) {
       console.log(`   Failed to load ${file}: ${e.message}`);
@@ -224,31 +130,25 @@ supplementaryFiles.forEach(file => {
   }
 });
 
-// Step 3: Load question-banks/ subdirectory (additional curated banks)
-const questionBanksDir = path.join(APP_DIR, 'question-banks');
-if (fs.existsSync(questionBanksDir)) {
-  fs.readdirSync(questionBanksDir).filter(f => f.endsWith('.json')).forEach(file => {
-    const filePath = path.join(questionBanksDir, file);
-    try {
-      const questions = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      if (Array.isArray(questions)) {
-        mergeQuestionsFromArray(questions, file);
-        console.log(`   Loaded question-banks/${file}`);
-      }
-    } catch (e) {
-      console.log(`   Failed to load question-banks/${file}: ${e.message}`);
-    }
-  });
-}
-
 // Log final question bank summary
 Object.keys(questionBank).sort().forEach(skill => {
   console.log(`   * ${skill}: ${questionBank[skill].length} questions`);
 });
 
-// ── Assessment History (Supabase) ──
-// History is now stored in the assessment_history table.
-// db.getHistoryForUser(userId) and db.getAllHistory() are used directly in routes.
+// ── Assessment History File ──
+const HISTORY_FILE = ensureSeededDataFile('assessment-history.json', []);
+
+function loadHistory() {
+  return readJSONFile(HISTORY_FILE, []);
+}
+
+function saveHistory(history) {
+  try {
+    writeJSONFile(HISTORY_FILE, history);
+  } catch (err) {
+    console.error('Error saving assessment history:', err.message);
+  }
+}
 
 // ── In-Memory Session Store ──
 const sessions = {};
@@ -532,9 +432,20 @@ function buildResult(session) {
   };
 }
 
-// ── Helper: Save result to assessment_history ──
-async function appendToHistory(userId, result) {
-  await db.insertHistory(userId, result);
+// ── Helper: Save result to history file ──
+function appendToHistory(userId, result) {
+  const history = loadHistory();
+  history.push({
+    userId: userId || 'anonymous',
+    skill: result.skill,
+    score: result.finalScore,
+    skillLevel: result.skillLevel,
+    accuracy: result.accuracy,
+    duration: result.duration,
+    timestamp: new Date().toISOString(),
+    breakdown: result.breakdown
+  });
+  saveHistory(history);
 }
 
 // ══════════════════════════════════════
@@ -848,8 +759,8 @@ app.get('/api/assessment/result', (req, res) => {
   res.json(result);
 });
 
-// ── POST /api/assessment/result (saves to Supabase) ──
-app.post('/api/assessment/result', async (req, res) => {
+// ── POST /api/assessment/result (new – saves to history) ──
+app.post('/api/assessment/result', (req, res) => {
   const { sessionId, userId } = req.body;
   const session = sessions[sessionId];
 
@@ -859,29 +770,23 @@ app.post('/api/assessment/result', async (req, res) => {
 
   const result = buildResult(session);
 
-  try {
-    await appendToHistory(userId, result);
-  } catch (err) {
-    console.error('Failed to save assessment history:', err.message);
-  }
+  // Save to history file
+  appendToHistory(userId, result);
 
   res.json(result);
 });
 
 // ── GET /api/assessment/history ──
-app.get('/api/assessment/history', async (req, res) => {
+app.get('/api/assessment/history', (req, res) => {
   const { userId } = req.query;
 
   if (!userId) {
     return res.status(400).json({ error: 'userId query parameter is required' });
   }
 
-  try {
-    const userHistory = await db.getHistoryForUser(userId);
-    res.json({ userId, assessments: userHistory });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to load history', message: err.message });
-  }
+  const history = loadHistory();
+  const userHistory = history.filter(h => h.userId === userId);
+  res.json({ userId, assessments: userHistory });
 });
 
 // ══════════════════════════════════════
@@ -1396,7 +1301,8 @@ app.get('/api/dashboard', async (req, res) => {
   }
 
   try {
-    const userHistory = await db.getHistoryForUser(userId);
+    const history = loadHistory();
+    const userHistory = history.filter(h => h.userId === userId);
 
     // ── 1. Milestone ──
     const allSkills = Object.keys(questionBank);
@@ -1441,38 +1347,15 @@ app.get('/api/dashboard', async (req, res) => {
       daysAgo: timeAgo(entry.timestamp)
     }));
 
-    // ── 4. Trending (computed from real assessment activity) ──
-    const allHistory = await db.getAllHistory();
-    const skillStats = {};
-    for (const entry of allHistory) {
-      if (!skillStats[entry.skill]) skillStats[entry.skill] = { count: 0, totalScore: 0 };
-      skillStats[entry.skill].count++;
-      skillStats[entry.skill].totalScore += entry.score;
-    }
-
-    // Sort by assessment count (demand proxy), normalise to 0-100 demand score
-    const maxCount = Math.max(1, ...Object.values(skillStats).map(s => s.count));
-    const trendingRaw = Object.entries(skillStats)
-      .map(([name, s]) => ({
-        name,
-        demand: Math.round((s.count / maxCount) * 100),
-        avgScore: Math.round((s.totalScore / s.count) * 10) / 10,
-        count: s.count
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 6);
-
-    // If no real data yet, fall back to static defaults
-    const trending = trendingRaw.length > 0
-      ? trendingRaw.map(t => ({ name: t.name, demand: t.demand, change: `+${t.count} assessments`, dir: 'up' }))
-      : [
-          { name: 'Python', demand: 95, change: '+12%', dir: 'up' },
-          { name: 'JavaScript', demand: 92, change: '+8%', dir: 'up' },
-          { name: 'Machine Learning', demand: 89, change: '+15%', dir: 'up' },
-          { name: 'Cloud Computing', demand: 87, change: '+10%', dir: 'up' },
-          { name: 'SQL', demand: 84, change: '+5%', dir: 'up' },
-          { name: 'Cybersecurity', demand: 82, change: '+18%', dir: 'up' }
-        ];
+    // ── 4. Trending (hardcoded static data) ──
+    const trending = [
+      { name: 'Python', demand: 95, change: '+12%', dir: 'up' },
+      { name: 'JavaScript', demand: 92, change: '+8%', dir: 'up' },
+      { name: 'Machine Learning', demand: 89, change: '+15%', dir: 'up' },
+      { name: 'Cloud Computing', demand: 87, change: '+10%', dir: 'up' },
+      { name: 'SQL', demand: 84, change: '+5%', dir: 'up' },
+      { name: 'Cybersecurity', demand: 82, change: '+18%', dir: 'up' }
+    ];
 
     // ── 5. Stats – newJobsCount ──
     let newJobsCount = 0;
@@ -1504,52 +1387,34 @@ app.get('/api/dashboard', async (req, res) => {
 });
 
 // ── GET /api/dashboard/leaderboard ──
-app.get('/api/dashboard/leaderboard', async (req, res) => {
-  try {
-  const [history, profiles] = await Promise.all([db.getAllHistory(), db.getAllProfiles()]);
-
-  // Aggregate per user: unique skills assessed and average score across latest per skill
-  const userMap = {};
-  for (const entry of history) {
-    const uid = entry.userId;
-    if (!uid || uid === 'anonymous') continue;
-    if (!userMap[uid]) userMap[uid] = {};
-    // Keep only the latest score per skill
-    if (!userMap[uid][entry.skill] || new Date(entry.timestamp) > new Date(userMap[uid][entry.skill].timestamp)) {
-      userMap[uid][entry.skill] = { score: entry.score, timestamp: entry.timestamp };
-    }
-  }
-
-  const rows = Object.entries(userMap).map(([uid, skillMap]) => {
-    const scores = Object.values(skillMap).map(s => s.score);
-    const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
-    const skillCount = scores.length;
-    const profile = profiles[uid] || {};
-    const name = profile.name || uid.split('@')[0];
-    const initials = name.split(/\s+/).filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?';
-    return { userId: uid, name, initials, avgScore, skills: skillCount, badge: getBadge(skillCount) };
-  });
-
-  // Sort by avgScore desc, then skills desc
-  rows.sort((a, b) => b.avgScore - a.avgScore || b.skills - a.skills);
-  const top10 = rows.slice(0, 10).map((r, i) => ({
-    rank: i + 1,
-    name: r.name,
-    avatar: r.initials,
-    score: r.avgScore,
-    skills: r.skills,
-    badge: r.badge
-  }));
-
-  res.json({ leaderboard: top10 });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to load leaderboard', message: err.message });
-  }
+app.get('/api/dashboard/leaderboard', (req, res) => {
+  const leaderboard = [
+    { rank: 1, name: 'Alex Chen', avatar: null, score: 92, skills: 8, badge: 'Elite Performer' },
+    { rank: 2, name: 'Priya Sharma', avatar: null, score: 88, skills: 7, badge: 'Expert Analyst' },
+    { rank: 3, name: 'Marcus Johnson', avatar: null, score: 85, skills: 7, badge: 'Expert Analyst' },
+    { rank: 4, name: 'Sarah Kim', avatar: null, score: 79, skills: 5, badge: 'Skilled Practitioner' },
+    { rank: 5, name: 'James O\'Brien', avatar: null, score: 74, skills: 4, badge: 'Skilled Practitioner' }
+  ];
+  res.json({ leaderboard });
 });
 
 // ══════════════════════════════════════
-// PROFILE API (Supabase)
+// PROFILE API
 // ══════════════════════════════════════
+
+const PROFILES_FILE = ensureSeededDataFile('profiles.json', {});
+
+function loadProfiles() {
+  return readJSONFile(PROFILES_FILE, {});
+}
+
+function saveProfiles(profiles) {
+  try {
+    writeJSONFile(PROFILES_FILE, profiles);
+  } catch (err) {
+    console.error('Error saving profiles:', err.message);
+  }
+}
 
 function getDefaultProfile(userId) {
   return {
@@ -1599,8 +1464,18 @@ function normalizeProfile(profile, userId) {
   };
 }
 
+const USERS_FILE = ensureSeededDataFile('users.json', {});
+
 function normalizeEmailAddress(email) {
   return (email || '').trim().toLowerCase();
+}
+
+function loadAuthUsers() {
+  return readJSONFile(USERS_FILE, {});
+}
+
+function saveAuthUsers(users) {
+  writeJSONFile(USERS_FILE, users);
 }
 
 function buildPasswordRecord(password) {
@@ -1629,10 +1504,11 @@ function buildSessionUser(user) {
   };
 }
 
-async function upsertUserProfile(user, overrides) {
+function upsertUserProfile(user, overrides) {
   const userId = normalizeEmailAddress(user.email);
   const now = new Date().toISOString();
-  const existing = normalizeProfile(await db.getProfile(userId), userId);
+  const profiles = loadProfiles();
+  const existing = normalizeProfile(profiles[userId], userId);
   const merged = normalizeProfile({
     ...existing,
     name: overrides && overrides.name !== undefined ? overrides.name : (existing.name || user.name || ''),
@@ -1650,7 +1526,9 @@ async function upsertUserProfile(user, overrides) {
     updatedAt: now
   }, userId);
 
-  return await db.upsertProfile(userId, merged);
+  profiles[userId] = merged;
+  saveProfiles(profiles);
+  return merged;
 }
 
 function prettyProviderName(provider) {
@@ -1661,7 +1539,7 @@ function prettyProviderName(provider) {
 }
 
 // ── Auth API ──
-app.post('/api/auth/signup', authLimiter, async (req, res) => {
+app.post('/api/auth/signup', (req, res) => {
   try {
     const name = (req.body.name || '').trim();
     const email = normalizeEmailAddress(req.body.email);
@@ -1672,35 +1550,38 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
     if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
     if (email === DEMO_ADMIN_EMAIL) return res.status(400).json({ error: 'This email is reserved. Please sign in instead.' });
 
-    const existingUser = await db.getAuthUser(email);
-    if (existingUser) {
+    const users = loadAuthUsers();
+    if (users[email]) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
 
     const now = new Date().toISOString();
-    const pwRecord = buildPasswordRecord(password);
-    const newUser = {
-      email, name, role: 'scholar', provider: 'local',
-      createdAt: now, updatedAt: now, lastLoginAt: now, ...pwRecord
+    users[email] = {
+      email,
+      name,
+      role: 'scholar',
+      provider: 'local',
+      createdAt: now,
+      updatedAt: now,
+      lastLoginAt: now,
+      ...buildPasswordRecord(password)
     };
-    await db.upsertAuthUser(email, newUser);
+    saveAuthUsers(users);
 
-    const profile = await upsertUserProfile(newUser, {
+    const profile = upsertUserProfile(users[email], {
       title: 'Aspiring SkillGap Scholar',
       bio: 'New SkillGap member focused on building verified skills and career readiness.',
       location: 'Worcester, MA'
     });
 
-    const sessionUser = buildSessionUser({ ...newUser, name: profile.name });
-    const token = generateAuthToken(email);
-    res.status(201).json({ user: sessionUser, profile, token });
+    res.status(201).json({ user: buildSessionUser({ ...users[email], name: profile.name }), profile });
   } catch (err) {
     console.error('Signup error:', err.message);
     res.status(500).json({ error: 'Failed to create account.' });
   }
 });
 
-app.post('/api/auth/login', authLimiter, async (req, res) => {
+app.post('/api/auth/login', (req, res) => {
   try {
     const email = normalizeEmailAddress(req.body.email);
     const password = req.body.password || '';
@@ -1717,29 +1598,30 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
         createdAt: new Date().toISOString(),
         lastLoginAt: new Date().toISOString()
       };
-      const profile = await upsertUserProfile(adminUser, { name: DEMO_ADMIN_NAME });
-      const token = generateAuthToken(DEMO_ADMIN_EMAIL);
-      return res.json({ user: buildSessionUser({ ...adminUser, name: profile.name }), profile, token });
+      const profile = upsertUserProfile(adminUser, { name: DEMO_ADMIN_NAME });
+      return res.json({ user: buildSessionUser({ ...adminUser, name: profile.name }), profile });
     }
 
-    const user = await db.getAuthUser(email);
+    const users = loadAuthUsers();
+    const user = users[email];
     if (!user || user.provider !== 'local' || !verifyPassword(password, user)) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    const now = new Date().toISOString();
-    await db.upsertAuthUser(email, { ...user, lastLoginAt: now, updatedAt: now });
+    user.lastLoginAt = new Date().toISOString();
+    user.updatedAt = new Date().toISOString();
+    users[email] = user;
+    saveAuthUsers(users);
 
-    const profile = await upsertUserProfile({ ...user, lastLoginAt: now });
-    const token = generateAuthToken(email);
-    res.json({ user: buildSessionUser({ ...user, name: profile.name }), profile, token });
+    const profile = upsertUserProfile(user);
+    res.json({ user: buildSessionUser({ ...user, name: profile.name }), profile });
   } catch (err) {
     console.error('Login error:', err.message);
     res.status(500).json({ error: 'Failed to sign in.' });
   }
 });
 
-app.post('/api/auth/social', authLimiter, async (req, res) => {
+app.post('/api/auth/social', (req, res) => {
   try {
     const provider = (req.body.provider || '').trim().toLowerCase();
     if (!provider) return res.status(400).json({ error: 'Provider is required.' });
@@ -1748,28 +1630,30 @@ app.post('/api/auth/social', authLimiter, async (req, res) => {
     const displayProvider = prettyProviderName(provider);
     const name = (req.body.name || (displayProvider + ' User')).trim();
 
-    const existing = await db.getAuthUser(email) || {};
+    const users = loadAuthUsers();
+    const existing = users[email] || {};
     const now = new Date().toISOString();
 
-    const userRecord = {
+    users[email] = {
       ...existing,
-      email, name,
+      email,
+      name,
       role: existing.role || 'scholar',
       provider,
       createdAt: existing.createdAt || now,
       updatedAt: now,
       lastLoginAt: now
     };
-    await db.upsertAuthUser(email, userRecord);
 
-    const profile = await upsertUserProfile(userRecord, {
+    saveAuthUsers(users);
+
+    const profile = upsertUserProfile(users[email], {
       title: displayProvider + ' Scholar',
       bio: 'Signed in with ' + displayProvider + ' and ready to build verified skills.',
       location: 'Worcester, MA'
     });
 
-    const token = generateAuthToken(email);
-    res.json({ user: buildSessionUser({ ...userRecord, name: profile.name }), profile, token });
+    res.json({ user: buildSessionUser({ ...users[email], name: profile.name }), profile });
   } catch (err) {
     console.error('Social auth error:', err.message);
     res.status(500).json({ error: 'Failed to complete social sign-in.' });
@@ -1878,87 +1762,78 @@ function calculateStrength(profile, assessmentHistory) {
 }
 
 // ── GET /api/profile ──
-app.get('/api/profile', async (req, res) => {
+app.get('/api/profile', (req, res) => {
   const { userId } = req.query;
 
   if (!userId) {
     return res.status(400).json({ error: 'userId query parameter is required' });
   }
 
-  try {
-    const raw = await db.getProfile(userId);
-    const profile = normalizeProfile(raw, userId);
-    res.json(profile);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to load profile', message: err.message });
-  }
+  const profiles = loadProfiles();
+  const profile = normalizeProfile(profiles[userId], userId);
+
+  res.json(profile);
 });
 
 // ── PUT /api/profile ──
-app.put('/api/profile', async (req, res) => {
+app.put('/api/profile', (req, res) => {
   const { userId, ...profileFields } = req.body;
 
   if (!userId) {
     return res.status(400).json({ error: 'userId is required in request body' });
   }
 
-  try {
-    const raw = await db.getProfile(userId);
-    const existing = normalizeProfile(raw, userId);
+  const profiles = loadProfiles();
+  const existing = normalizeProfile(profiles[userId], userId);
 
-    // Merge: only update fields that are provided
-    for (const key of Object.keys(profileFields)) {
-      if (key === 'social' && typeof profileFields.social === 'object') {
-        existing.social = { ...(existing.social || {}), ...profileFields.social };
-      } else {
-        existing[key] = profileFields[key];
-      }
+  // Merge: only update fields that are provided
+  for (const key of Object.keys(profileFields)) {
+    if (key === 'social' && typeof profileFields.social === 'object') {
+      existing.social = { ...(existing.social || {}), ...profileFields.social };
+    } else {
+      existing[key] = profileFields[key];
     }
-
-    existing.userId = userId;
-    existing.email = existing.email || userId;
-    existing.updatedAt = new Date().toISOString();
-    const updated = await db.upsertProfile(userId, normalizeProfile(existing, userId));
-
-    // Keep auth_users name/role in sync
-    const authUser = await db.getAuthUser(userId);
-    if (authUser) {
-      await db.upsertAuthUser(userId, {
-        ...authUser,
-        name: updated.name || authUser.name,
-        role: updated.role || authUser.role,
-        updatedAt: updated.updatedAt
-      });
-    }
-
-    res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to update profile', message: err.message });
   }
+
+  existing.userId = userId;
+  existing.email = existing.email || userId;
+  existing.updatedAt = new Date().toISOString();
+  profiles[userId] = normalizeProfile(existing, userId);
+  saveProfiles(profiles);
+
+  const authUsers = loadAuthUsers();
+  if (authUsers[userId]) {
+    authUsers[userId] = {
+      ...authUsers[userId],
+      name: profiles[userId].name || authUsers[userId].name,
+      role: profiles[userId].role || authUsers[userId].role,
+      provider: profiles[userId].provider || authUsers[userId].provider,
+      updatedAt: profiles[userId].updatedAt
+    };
+    saveAuthUsers(authUsers);
+  }
+
+  res.json(profiles[userId]);
 });
 
 // ── GET /api/profile/strength ──
-app.get('/api/profile/strength', async (req, res) => {
+app.get('/api/profile/strength', (req, res) => {
   const { userId } = req.query;
 
   if (!userId) {
     return res.status(400).json({ error: 'userId query parameter is required' });
   }
 
-  try {
-    const [raw, assessmentHistory] = await Promise.all([
-      db.getProfile(userId),
-      db.getHistoryForUser(userId)
-    ]);
-    const profile = normalizeProfile(raw, userId);
-    res.json(calculateStrength(profile, assessmentHistory));
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to compute strength', message: err.message });
-  }
+  const profiles = loadProfiles();
+  const profile = normalizeProfile(profiles[userId], userId);
+  const assessmentHistory = loadHistory();
+
+  const result = calculateStrength(profile, assessmentHistory);
+  res.json(result);
 });
 
 // ── GET /api/skills-lab ──
-app.get('/api/skills-lab', async (req, res) => {
+app.get('/api/skills-lab', (req, res) => {
   const { userId } = req.query;
 
   if (!userId) {
@@ -1966,11 +1841,12 @@ app.get('/api/skills-lab', async (req, res) => {
   }
 
   try {
-    const [userAssessments, rawProfile] = await Promise.all([
-      db.getHistoryForUser(userId),
-      db.getProfile(userId)
-    ]);
-    const profile = normalizeProfile(rawProfile, userId);
+    const assessmentHistory = loadHistory();
+    const profiles = loadProfiles();
+    const profile = normalizeProfile(profiles[userId], userId);
+
+    // Filter assessments for this user
+    const userAssessments = assessmentHistory.filter(a => a.userId === userId);
 
     // Group by skill and find latest assessment per skill
     const skillMap = {};
@@ -2078,95 +1954,9 @@ app.get('/api/skills-lab', async (req, res) => {
 // ANALYZER API – Resume Parsing & Gap Analysis
 // ══════════════════════════════════════
 
-// Resume analyzer: keep in memory (parse only, don't persist)
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }
-});
-
-// Profile document uploads: use Supabase Storage (in-memory multer)
-const documentUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowed = ['.pdf', '.docx', '.doc', '.txt', '.png', '.jpg', '.jpeg'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, allowed.includes(ext));
-  }
-});
-
-// ── POST /api/profile/upload-document ──
-app.post('/api/profile/upload-document', documentUpload.single('document'), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded or file type not allowed.' });
-
-    const userId = req.body.userId || req.authenticatedUserId;
-    if (!userId) return res.status(400).json({ error: 'userId is required.' });
-
-    const docId = Date.now().toString(36);
-    const ext = path.extname(req.file.originalname).toLowerCase();
-    const safeFilename = path.basename(req.file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40) + ext;
-
-    const { filePath, publicUrl } = await db.uploadDocument(
-      userId, docId, safeFilename, req.file.buffer, req.file.mimetype
-    );
-
-    const rawProfile = await db.getProfile(userId);
-    const profile = normalizeProfile(rawProfile, userId);
-
-    const doc = {
-      id: docId,
-      name: req.file.originalname,
-      filePath,
-      size: req.file.size,
-      type: ext.slice(1),
-      url: publicUrl,
-      uploadedAt: new Date().toISOString()
-    };
-
-    profile.documents = [...(profile.documents || []), doc];
-    profile.updatedAt = new Date().toISOString();
-    await db.upsertProfile(userId, profile);
-
-    res.json({ success: true, document: doc });
-  } catch (err) {
-    console.error('Document upload error:', err.message);
-    res.status(500).json({ error: 'Failed to upload document.' });
-  }
-});
-
-// ── GET /api/profile/documents/:filename – documents now served from Supabase Storage directly ──
-// This route kept for backwards compatibility; new uploads return a direct Supabase URL.
-app.get('/api/profile/documents/:filename', (req, res) => {
-  res.status(410).json({ error: 'Documents are now served directly from storage. Use the url field from the document object.' });
-});
-
-// ── DELETE /api/profile/documents/:docId ──
-app.delete('/api/profile/documents/:docId', async (req, res) => {
-  try {
-    const userId = req.query.userId || req.authenticatedUserId;
-    if (!userId) return res.status(400).json({ error: 'userId is required.' });
-
-    const rawProfile = await db.getProfile(userId);
-    const profile = normalizeProfile(rawProfile, userId);
-
-    const docId = req.params.docId;
-    const doc = (profile.documents || []).find(d => d.id === docId);
-    if (!doc) return res.status(404).json({ error: 'Document not found.' });
-
-    if (doc.filePath) {
-      try { await db.deleteDocument(doc.filePath); } catch (_) {}
-    }
-
-    profile.documents = profile.documents.filter(d => d.id !== docId);
-    profile.updatedAt = new Date().toISOString();
-    await db.upsertProfile(userId, profile);
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Document delete error:', err.message);
-    res.status(500).json({ error: 'Failed to delete document.' });
-  }
 });
 
 // ── POST /api/analyzer/parse-resume ──
@@ -2184,12 +1974,20 @@ app.post('/api/analyzer/parse-resume', upload.single('resume'), async (req, res)
     if (ext === '.txt') {
       resumeText = file.buffer.toString('utf8');
     } else if (ext === '.pdf') {
-      try {
-        const pdfData = await pdfParse(file.buffer);
-        resumeText = pdfData.text || '';
-      } catch (pdfErr) {
-        console.error('PDF parse error:', pdfErr.message);
-        return res.status(400).json({ error: 'Failed to parse PDF file. Please try a .docx or .txt version.' });
+      // Simple PDF text extraction: look for text between stream/endstream markers
+      const rawText = file.buffer.toString('utf8');
+      const streamMatches = rawText.match(/stream\r?\n([\s\S]*?)endstream/g);
+      if (streamMatches) {
+        resumeText = streamMatches
+          .map(m => m.replace(/^stream\r?\n/, '').replace(/endstream$/, ''))
+          .join(' ')
+          .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+      // If extraction yielded very little, send raw readable text
+      if (resumeText.length < 50) {
+        resumeText = rawText.replace(/[^\x20-\x7E\n\r\t]/g, ' ').replace(/\s+/g, ' ').trim();
       }
     } else if (ext === '.docx') {
       try {
@@ -2287,13 +2085,9 @@ app.post('/api/analyzer/analyze', async (req, res) => {
   }
 
   try {
-    // Load user's assessment history and profile in parallel
-    const [userAssessments, rawProfile] = await Promise.all([
-      userId ? db.getHistoryForUser(userId) : Promise.resolve([]),
-      userId ? db.getProfile(userId) : Promise.resolve(null)
-    ]);
-    const profile = rawProfile || {};
-    const profileSkills = profile.skills || [];
+    // Load user's assessment history for real scores
+    const assessmentHistory = loadHistory();
+    const userAssessments = userId ? assessmentHistory.filter(h => h.userId === userId) : [];
 
     // Build a map of latest assessment scores per skill
     const assessmentScores = {};
@@ -2302,6 +2096,11 @@ app.post('/api/analyzer/analyze', async (req, res) => {
         assessmentScores[assessment.skill] = assessment;
       }
     }
+
+    // Load user's profile for additional skills
+    const profiles = loadProfiles();
+    const profile = userId ? (profiles[userId] || {}) : {};
+    const profileSkills = profile.skills || [];
 
     // Combine skills: start with provided userSkills, enrich with assessment scores and profile
     const combinedSkills = [];
@@ -2554,7 +2353,7 @@ IMPORTANT: Return ONLY valid JSON with no markdown formatting, no code fences, j
 });
 
 // ── GET /api/analyzer/user-skills ──
-app.get('/api/analyzer/user-skills', async (req, res) => {
+app.get('/api/analyzer/user-skills', (req, res) => {
   const { userId } = req.query;
 
   if (!userId) {
@@ -2562,12 +2361,9 @@ app.get('/api/analyzer/user-skills', async (req, res) => {
   }
 
   try {
-    const [userAssessments, rawProfile] = await Promise.all([
-      db.getHistoryForUser(userId),
-      db.getProfile(userId)
-    ]);
-    const profile = rawProfile || {};
-    const profileSkills = profile.skills || [];
+    // Load assessment history
+    const assessmentHistory = loadHistory();
+    const userAssessments = assessmentHistory.filter(h => h.userId === userId);
 
     // Get latest assessment score per skill
     const assessmentScores = {};
@@ -2576,6 +2372,11 @@ app.get('/api/analyzer/user-skills', async (req, res) => {
         assessmentScores[assessment.skill] = assessment;
       }
     }
+
+    // Load profile skills
+    const profiles = loadProfiles();
+    const profile = profiles[userId] || {};
+    const profileSkills = profile.skills || [];
 
     // Combine skills - assessment scores take priority
     const skills = [];
@@ -2615,23 +2416,31 @@ app.get('/api/analyzer/user-skills', async (req, res) => {
 });
 
 // ══════════════════════════════════════════════
-// ── Peer Coaching Module (Supabase)
+// ── Peer Coaching Module
 // ══════════════════════════════════════════════
 
+const COACHES_FILE = ensureSeededDataFile('peer-coaches.json', {});
+const BOOKINGS_FILE = ensureSeededDataFile('peer-session-bookings.json', []);
+const REVIEWS_FILE = ensureSeededDataFile('peer-session-reviews.json', []);
+
+function readJSON(file, fallback) {
+  return readJSONFile(file, fallback);
+}
+function writeJSON(file, data) {
+  writeJSONFile(file, data);
+}
+
 // ── Eligibility: check which skills user can coach (8+) and needs help (<=5) ──
-app.get('/api/peer-coaching/eligibility', async (req, res) => {
+app.get('/api/peer-coaching/eligibility', (req, res) => {
   try {
     const userId = req.query.userId;
     if (!userId) return res.status(400).json({ error: 'userId required' });
 
-    const [history, coach] = await Promise.all([
-      db.getHistoryForUser(userId),
-      db.getCoach(userId)
-    ]);
+    const history = readJSON(HISTORY_FILE, []);
 
     // Get latest score per skill for this user
     const latestScores = {};
-    history.forEach(h => {
+    history.filter(h => h.userId === userId).forEach(h => {
       if (!latestScores[h.skill] || new Date(h.timestamp) > new Date(latestScores[h.skill].timestamp)) {
         latestScores[h.skill] = { score: h.score, timestamp: h.timestamp, level: h.skillLevel };
       }
@@ -2645,31 +2454,32 @@ app.get('/api/peer-coaching/eligibility', async (req, res) => {
       if (data.score <= 5) needsHelp.push({ skill, score: data.score, level: data.level });
     });
 
-    res.json({ canCoach, needsHelp, hasProfile: !!coach, latestScores });
+    // Check if user already has a coach profile
+    const coaches = readJSON(COACHES_FILE, {});
+    const hasProfile = !!coaches[userId];
+
+    res.json({ canCoach, needsHelp, hasProfile, latestScores });
   } catch (err) {
     res.status(500).json({ error: 'Eligibility check failed', message: err.message });
   }
 });
 
 // ── Save/update coach profile ──
-app.post('/api/peer-coaching/coach-profile', async (req, res) => {
+app.post('/api/peer-coaching/coach-profile', (req, res) => {
   try {
     const { userId, skillsOffered, headline, bio, sessionLengths } = req.body;
     if (!userId || !skillsOffered || skillsOffered.length === 0) {
       return res.status(400).json({ error: 'userId and at least one skill required' });
     }
 
+    // Sanitize text inputs
     const cleanHeadline = (headline || '').slice(0, 80);
     const cleanBio = (bio || '').slice(0, 300);
 
-    const [history, profile, existing] = await Promise.all([
-      db.getHistoryForUser(userId),
-      db.getProfile(userId),
-      db.getCoach(userId)
-    ]);
-
+    // Verify eligibility — check assessment scores
+    const history = readJSON(HISTORY_FILE, []);
     const latestScores = {};
-    history.forEach(h => {
+    history.filter(h => h.userId === userId).forEach(h => {
       if (!latestScores[h.skill] || new Date(h.timestamp) > new Date(latestScores[h.skill].timestamp)) {
         latestScores[h.skill] = { score: h.score, timestamp: h.timestamp };
       }
@@ -2686,48 +2496,56 @@ app.post('/api/peer-coaching/coach-profile', async (req, res) => {
       return res.status(403).json({ error: 'No verified skills (score 8+) among selected skills' });
     }
 
-    const displayName = profile?.name || userId.split('@')[0];
-    const coach = await db.upsertCoach(userId, {
+    // Get profile info
+    const profiles = readJSON(PROFILES_FILE, {});
+    const profile = profiles[userId] || {};
+
+    const coaches = readJSON(COACHES_FILE, {});
+    coaches[userId] = {
       userId,
-      name: displayName,
-      avatar: displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2),
+      name: profile.name || userId.split('@')[0],
+      avatar: (profile.name || userId).split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2),
       skillsOffered: verifiedSkills.map(v => v.skill),
       headline: cleanHeadline,
       bio: cleanBio,
       verifiedSkills,
       sessionLengths: sessionLengths || [15, 20],
       active: true,
-      createdAt: existing?.createdAt || new Date().toISOString()
-    });
+      createdAt: coaches[userId]?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
 
-    res.json({ success: true, coach });
+    writeJSON(COACHES_FILE, coaches);
+    res.json({ success: true, coach: coaches[userId] });
   } catch (err) {
     res.status(500).json({ error: 'Failed to save coach profile', message: err.message });
   }
 });
 
 // ── Get coach profile ──
-app.get('/api/peer-coaching/coach-profile', async (req, res) => {
+app.get('/api/peer-coaching/coach-profile', (req, res) => {
   try {
     const userId = req.query.userId;
-    const coach = userId ? await db.getCoach(userId) : null;
-    res.json({ coach: coach || null });
+    const coaches = readJSON(COACHES_FILE, {});
+    if (userId && coaches[userId]) {
+      return res.json({ coach: coaches[userId] });
+    }
+    return res.json({ coach: null });
   } catch (err) {
     res.status(500).json({ error: 'Failed to load coach profile' });
   }
 });
 
 // ── List coaches (with optional skill filter) ──
-app.get('/api/peer-coaching/coaches', async (req, res) => {
+app.get('/api/peer-coaching/coaches', (req, res) => {
   try {
     const skill = req.query.skill;
     const sort = req.query.sort || 'match';
-    const userId = req.query.userId;
+    const userId = req.query.userId; // current user for matching
 
-    const [coachMap, reviews, bookings] = await Promise.all([
-      db.getAllCoaches(), db.getAllReviews(), db.getAllBookings()
-    ]);
-    const coaches = coachMap;
+    const coaches = readJSON(COACHES_FILE, {});
+    const reviews = readJSON(REVIEWS_FILE, []);
+    const bookings = readJSON(BOOKINGS_FILE, []);
 
     // Compute stats per coach
     let coachList = Object.values(coaches).filter(c => c.active);
@@ -2770,22 +2588,24 @@ app.get('/api/peer-coaching/coaches', async (req, res) => {
 });
 
 // ── Book a session ──
-app.post('/api/peer-coaching/book', async (req, res) => {
+app.post('/api/peer-coaching/book', (req, res) => {
   try {
     const { skill, coachUserId, learnerUserId, actorUserId, duration, scheduledAt, goal } = req.body;
     const requesterId = actorUserId || learnerUserId;
     if (!skill || !coachUserId || !requesterId) {
       return res.status(400).json({ error: 'skill, coachUserId, and actorUserId required' });
     }
+
+    // Verify coach exists and offers this skill
+    const coaches = readJSON(COACHES_FILE, {});
+    if (!coaches[coachUserId] || !coaches[coachUserId].skillsOffered.includes(skill)) {
+      return res.status(400).json({ error: 'Coach does not offer this skill' });
+    }
     if (coachUserId === requesterId) {
       return res.status(400).json({ error: 'You cannot book a session with yourself' });
     }
 
-    const [coach, bookings] = await Promise.all([db.getCoach(coachUserId), db.getAllBookings()]);
-    if (!coach || !coach.skillsOffered.includes(skill)) {
-      return res.status(400).json({ error: 'Coach does not offer this skill' });
-    }
-
+    const bookings = readJSON(BOOKINGS_FILE, []);
     const existingActive = bookings.find(b =>
       b.coachUserId === coachUserId &&
       b.learnerUserId === requesterId &&
@@ -2796,7 +2616,7 @@ app.post('/api/peer-coaching/book', async (req, res) => {
       return res.status(400).json({ error: 'You already have an active session request for this coach and skill' });
     }
 
-    const booking = await db.insertBooking({
+    const booking = {
       id: 'BK-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
       skill,
       coachUserId,
@@ -2806,8 +2626,10 @@ app.post('/api/peer-coaching/book', async (req, res) => {
       duration: duration || 20,
       goal: goal || '',
       createdAt: new Date().toISOString()
-    });
+    };
 
+    bookings.push(booking);
+    writeJSON(BOOKINGS_FILE, bookings);
     res.json({ success: true, booking });
   } catch (err) {
     res.status(500).json({ error: 'Booking failed', message: err.message });
@@ -2815,17 +2637,19 @@ app.post('/api/peer-coaching/book', async (req, res) => {
 });
 
 // ── Get bookings for a user ──
-app.get('/api/peer-coaching/bookings', async (req, res) => {
+app.get('/api/peer-coaching/bookings', (req, res) => {
   try {
     const userId = req.query.userId;
     if (!userId) return res.status(400).json({ error: 'userId required' });
 
-    const [allBookings, coaches, profiles, reviews] = await Promise.all([
-      db.getAllBookings(), db.getAllCoaches(), db.getAllProfiles(), db.getAllReviews()
-    ]);
+    const bookings = readJSON(BOOKINGS_FILE, []);
+    const coaches = readJSON(COACHES_FILE, {});
+    const profiles = readJSON(PROFILES_FILE, {});
+    const reviews = readJSON(REVIEWS_FILE, []);
 
-    const userBookings = allBookings.filter(b => b.coachUserId === userId || b.learnerUserId === userId);
+    const userBookings = bookings.filter(b => b.coachUserId === userId || b.learnerUserId === userId);
 
+    // Enrich with names
     const enriched = userBookings.map(b => {
       const coachName = coaches[b.coachUserId]?.name || profiles[b.coachUserId]?.name || b.coachUserId;
       const learnerName = profiles[b.learnerUserId]?.name || b.learnerUserId;
@@ -2841,7 +2665,7 @@ app.get('/api/peer-coaching/bookings', async (req, res) => {
 });
 
 // ── Update booking status ──
-app.put('/api/peer-coaching/bookings/:id', async (req, res) => {
+app.put('/api/peer-coaching/bookings/:id', (req, res) => {
   try {
     const bookingId = req.params.id;
     const { status, actorUserId } = req.body;
@@ -2853,9 +2677,11 @@ app.put('/api/peer-coaching/bookings/:id', async (req, res) => {
       return res.status(400).json({ error: 'actorUserId required' });
     }
 
-    const booking = await db.getBookingById(bookingId);
-    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    const bookings = readJSON(BOOKINGS_FILE, []);
+    const idx = bookings.findIndex(b => b.id === bookingId);
+    if (idx === -1) return res.status(404).json({ error: 'Booking not found' });
 
+    const booking = bookings[idx];
     const isCoach = booking.coachUserId === actorUserId;
     const isLearner = booking.learnerUserId === actorUserId;
     if (!isCoach && !isLearner) {
@@ -2863,23 +2689,33 @@ app.put('/api/peer-coaching/bookings/:id', async (req, res) => {
     }
 
     const transitionRules = {
-      pending:   { confirmed: isCoach, cancelled: isCoach || isLearner },
-      confirmed: { completed: isCoach, cancelled: isCoach || isLearner },
-      completed: {}, cancelled: {}
+      pending: {
+        confirmed: isCoach,
+        cancelled: isCoach || isLearner
+      },
+      confirmed: {
+        completed: isCoach,
+        cancelled: isCoach || isLearner
+      },
+      completed: {},
+      cancelled: {}
     };
-    if (!transitionRules[booking.status]?.[status]) {
+    const currentRules = transitionRules[booking.status] || {};
+    if (!currentRules[status]) {
       return res.status(400).json({ error: 'Invalid status transition for this user' });
     }
 
-    const updated = await db.updateBooking(bookingId, { status });
-    res.json({ success: true, booking: updated });
+    bookings[idx].status = status;
+    bookings[idx].updatedAt = new Date().toISOString();
+    writeJSON(BOOKINGS_FILE, bookings);
+    res.json({ success: true, booking: bookings[idx] });
   } catch (err) {
     res.status(500).json({ error: 'Update failed', message: err.message });
   }
 });
 
 // ── Submit review ──
-app.post('/api/peer-coaching/review', async (req, res) => {
+app.post('/api/peer-coaching/review', (req, res) => {
   try {
     const { bookingId, actorUserId, rating, feedback, wouldRecommend } = req.body;
     if (!bookingId || rating === undefined || rating === null) return res.status(400).json({ error: 'bookingId and rating required' });
@@ -2889,7 +2725,8 @@ app.post('/api/peer-coaching/review', async (req, res) => {
       return res.status(400).json({ error: 'Rating must be a number between 1 and 5' });
     }
 
-    const [booking, reviews] = await Promise.all([db.getBookingById(bookingId), db.getAllReviews()]);
+    const bookings = readJSON(BOOKINGS_FILE, []);
+    const booking = bookings.find(b => b.id === bookingId);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
     if (booking.learnerUserId !== actorUserId) {
       return res.status(403).json({ error: 'Only the learner can review this session' });
@@ -2897,11 +2734,15 @@ app.post('/api/peer-coaching/review', async (req, res) => {
     if (booking.status !== 'completed') {
       return res.status(400).json({ error: 'Session must be completed before it can be reviewed' });
     }
+
+    const reviews = readJSON(REVIEWS_FILE, []);
+
+    // Prevent duplicate reviews
     if (reviews.find(r => r.bookingId === bookingId && r.learnerUserId === actorUserId)) {
       return res.status(400).json({ error: 'Already reviewed this session' });
     }
 
-    await db.insertReview({
+    reviews.push({
       bookingId,
       coachUserId: booking.coachUserId,
       learnerUserId: booking.learnerUserId,
@@ -2911,6 +2752,8 @@ app.post('/api/peer-coaching/review', async (req, res) => {
       createdAt: new Date().toISOString()
     });
 
+    writeJSON(REVIEWS_FILE, reviews);
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Review failed', message: err.message });
@@ -2918,17 +2761,19 @@ app.post('/api/peer-coaching/review', async (req, res) => {
 });
 
 // ── Recommendations: suggest coaches based on user's weak skills ──
-app.get('/api/peer-coaching/recommendations', async (req, res) => {
+app.get('/api/peer-coaching/recommendations', (req, res) => {
   try {
     const userId = req.query.userId;
     if (!userId) return res.status(400).json({ error: 'userId required' });
 
-    const [history, coaches, reviews, bookings] = await Promise.all([
-      db.getHistoryForUser(userId), db.getAllCoaches(), db.getAllReviews(), db.getAllBookings()
-    ]);
+    const history = readJSON(HISTORY_FILE, []);
+    const coaches = readJSON(COACHES_FILE, {});
+    const reviews = readJSON(REVIEWS_FILE, []);
+    const bookings = readJSON(BOOKINGS_FILE, []);
 
+    // Find user's weak skills
     const latestScores = {};
-    history.forEach(h => {
+    history.filter(h => h.userId === userId).forEach(h => {
       if (!latestScores[h.skill] || new Date(h.timestamp) > new Date(latestScores[h.skill].timestamp)) {
         latestScores[h.skill] = { score: h.score, timestamp: h.timestamp };
       }
@@ -2976,11 +2821,12 @@ app.get('/api/peer-coaching/recommendations', async (req, res) => {
 });
 
 // ── Coaching analytics (for dashboard / demo) ──
-app.get('/api/peer-coaching/analytics', async (req, res) => {
+app.get('/api/peer-coaching/analytics', (req, res) => {
   try {
-    const [coaches, bookings, reviews, history] = await Promise.all([
-      db.getAllCoaches(), db.getAllBookings(), db.getAllReviews(), db.getAllHistory()
-    ]);
+    const coaches = readJSON(COACHES_FILE, {});
+    const bookings = readJSON(BOOKINGS_FILE, []);
+    const reviews = readJSON(REVIEWS_FILE, []);
+    const history = readJSON(HISTORY_FILE, []);
 
     const activeCoaches = Object.values(coaches).filter(c => c.active).length;
     const totalBookings = bookings.length;
@@ -3007,43 +2853,6 @@ app.get('/api/peer-coaching/analytics', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Analytics failed' });
-  }
-});
-
-// ── Peer Chat ──
-app.get('/api/chat/:bookingId', requireAuth, async (req, res) => {
-  try {
-    const { bookingId } = req.params;
-    const userId = req.authenticatedUserId;
-    const booking = await db.getBookingById(bookingId);
-    if (!booking) return res.status(404).json({ error: 'Booking not found' });
-    if (booking.coachUserId !== userId && booking.learnerUserId !== userId) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-    const messages = await db.getChatMessages(bookingId);
-    res.json({ messages });
-  } catch (err) {
-    console.error('GET /api/chat error:', err);
-    res.status(500).json({ error: 'Failed to fetch messages' });
-  }
-});
-
-app.post('/api/chat/:bookingId', requireAuth, async (req, res) => {
-  try {
-    const { bookingId } = req.params;
-    const userId = req.authenticatedUserId;
-    const { content } = req.body;
-    if (!content || !content.trim()) return res.status(400).json({ error: 'Message cannot be empty' });
-    const booking = await db.getBookingById(bookingId);
-    if (!booking) return res.status(404).json({ error: 'Booking not found' });
-    if (booking.coachUserId !== userId && booking.learnerUserId !== userId) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-    const message = await db.insertChatMessage(bookingId, userId, content.trim());
-    res.json({ message });
-  } catch (err) {
-    console.error('POST /api/chat error:', err);
-    res.status(500).json({ error: 'Failed to send message' });
   }
 });
 
